@@ -8,13 +8,18 @@
 
   <ItemGroup>
     <Folder Include="Agents\" />
+    <Folder Include="Persistence\Migrations\" />
     <Folder Include="Rag\" />
     <Folder Include="Persistence\Configurations\" />
-    <Folder Include="Persistence\Migrations\" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿
+
+using Greenmind.Domain.Consts.Enums;
 
 namespace Greenmind.Domain.Entities
 {
@@ -18,7 +18,7 @@ namespace Greenmind.Domain.Entities
 
         public DateOnly? ActualDate { get; set; }
 
-        public TaskStatus Status { get; set; }
+        public Greenmind.Domain.Consts.Enums.TaskStatus Status { get; set; }
 
         public TaskPriority Priority { get; set; }
 

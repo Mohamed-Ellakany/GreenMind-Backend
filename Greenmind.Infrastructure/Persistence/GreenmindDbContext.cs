@@ -1,5 +1,4 @@
 ﻿using Greenmind.Domain.Entities;
-using Microsoft.AspNet.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Greenmind.Infrastructure.Persistence;
