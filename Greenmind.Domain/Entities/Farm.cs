@@ -6,7 +6,7 @@ namespace Greenmind.Domain.Entities
 {
     public class Farm : BaseEntity
     {
-        public int OwnerUserId { get; set; }
+        public string OwnerUserId { get; set; }
 
         public required string Name { get; set; }
 

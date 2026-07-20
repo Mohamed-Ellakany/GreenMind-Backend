@@ -31,7 +31,12 @@ public DbSet<Farm> Farms => Set<Farm>();
             .WithOne(p => p.Farm)
             .HasForeignKey(p => p.FarmId);
 
-        modelBuilder.Entity<Crop>()
+		modelBuilder.Entity<Farm>()
+            .HasOne(f => f.Owner)
+            .WithOne(u => u.Farm)
+            .HasForeignKey<Farm>(f=>f.OwnerUserId);
+
+		modelBuilder.Entity<Crop>()
             .HasMany(c => c.ExportPlans)
             .WithOne(p => p.Crop)
             .HasForeignKey(p => p.CropId);

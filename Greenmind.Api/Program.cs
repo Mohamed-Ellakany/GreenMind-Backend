@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace Greenmind.Api
 {
     public class Program
@@ -10,11 +12,14 @@ namespace Greenmind.Api
 
             builder.Services.AddControllers();
 
+            builder.Services.AddDbContext<Greenmind.Infrastructure.Persistence.GreenmindDbContext>(options =>
+				options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
+			// Configure the HTTP request pipeline.
 
-            app.UseHttpsRedirection();
+			app.UseHttpsRedirection();
 
             app.UseAuthorization();
 
