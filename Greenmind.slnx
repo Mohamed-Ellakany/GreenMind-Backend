@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Greenmind.Api/Greenmind.Api.csproj" />
+  <Project Path="Greenmind.Application/Greenmind.Application.csproj" />
+  <Project Path="Greenmind.Domain/Greenmind.Domain.csproj" />
+  <Project Path="Greenmind.Infrastructure/Greenmind.Infrastructure.csproj" />
+</Solution>
