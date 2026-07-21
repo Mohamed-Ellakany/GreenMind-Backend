@@ -7,11 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Interfaces\" />
-    <Folder Include="Dtos\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Greenmind.Domain\Greenmind.Domain.csproj" />
   </ItemGroup>
 
