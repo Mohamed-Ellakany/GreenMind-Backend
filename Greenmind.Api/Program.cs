@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Greenmind.Infrastructure;
+using Greenmind.Api.Filters;
+using Greenmind.Api.Middleware;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Greenmind.Api
 {
@@ -11,7 +14,16 @@ namespace Greenmind.Api
 
             // Add services to the container.
 
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<ModelStateValidationFilter>();
+                options.Filters.Add<ApiResponseWrappingFilter>();
+            });
+
+            builder.Services.Configure<ApiBehaviorOptions>(options =>
+            {
+                options.SuppressModelStateInvalidFilter = true;
+            });
 
             builder.Services.AddDbContext<Greenmind.Infrastructure.Persistence.GreenmindDbContext>(options =>
 				options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -22,7 +34,11 @@ namespace Greenmind.Api
 
 			// Configure the HTTP request pipeline.
 
+            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
 			app.UseHttpsRedirection();
+
+            app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
             app.UseAuthorization();
 
