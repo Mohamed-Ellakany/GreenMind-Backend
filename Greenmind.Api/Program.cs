@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Greenmind.Infrastructure;
 
 namespace Greenmind.Api
 {
@@ -14,6 +15,8 @@ namespace Greenmind.Api
 
             builder.Services.AddDbContext<Greenmind.Infrastructure.Persistence.GreenmindDbContext>(options =>
 				options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+            builder.Services.AddInfrastructureServices();
 
             var app = builder.Build();
 
