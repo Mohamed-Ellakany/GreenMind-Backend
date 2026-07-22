@@ -17,16 +17,19 @@ public class AuthController : ControllerBase
     private readonly GreenmindDbContext _db;
 
     private const string FarmOwnerRole = "FarmOwner";
+    private readonly Greenmind.Application.Services.IJwtTokenService _jwtService;
 
     public AuthController(UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         IUnitOfWork unitOfWork,
-        GreenmindDbContext db)
+        GreenmindDbContext db,
+        Greenmind.Application.Services.IJwtTokenService jwtService)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _unitOfWork = unitOfWork;
         _db = db;
+        _jwtService = jwtService;
     }
 
     [HttpPost("register")]
@@ -95,7 +98,47 @@ public class AuthController : ControllerBase
             Email = user.Email!,
             FarmId = farm.Id.ToString()
         };
+        return CreatedAtAction(nameof(Register), response);
+    }
 
-        return CreatedAtAction(null, response);
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user is null)
+            return Unauthorized();
+
+        if (!user.IsActive)
+            return Unauthorized(new { Message = "User account is not active." });
+
+        var valid = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!valid)
+            return Unauthorized();
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var claims = new List<System.Security.Claims.Claim>
+        {
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.UserName ?? string.Empty),
+            new System.Security.Claims.Claim("email", user.Email ?? string.Empty)
+        };
+
+        if (roles.Any())
+        {
+            foreach (var r in roles)
+                claims.Add(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, r));
+        }
+
+        if (user.Farm is not null)
+        {
+            claims.Add(new System.Security.Claims.Claim("farmId", user.Farm.Id.ToString()));
+        }
+
+        var token = _jwtService.CreateToken(claims);
+
+        return Ok(new LoginResponse { Token = token, ExpiresAtUtc = DateTime.UtcNow.AddHours(1) });
     }
 }
