@@ -1,18 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
 
 namespace Greenmind.Domain.Entities
 {
     public class Farm : BaseEntity
     {
-        public string OwnerUserId { get; set; }
+        [Required]
+        [ForeignKey(nameof(Owner))]
+        public string OwnerUserId { get; set; }   
 
+        [Required]
+        [MaxLength(200)]
         public required string Name { get; set; }
 
         // Navigation
         public ApplicationUser Owner { get; set; } = null!;
 
         public ICollection<ExportPlan> ExportPlans { get; set; } = new List<ExportPlan>();
+
     }
 }

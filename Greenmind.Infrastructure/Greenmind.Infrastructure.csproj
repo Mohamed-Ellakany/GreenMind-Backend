@@ -7,10 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Agents\" />
     <Folder Include="Persistence\Migrations\" />
     <Folder Include="Rag\" />
-    <Folder Include="Persistence\Configurations\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +18,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.78.0" />
   </ItemGroup>
 
   <ItemGroup>
