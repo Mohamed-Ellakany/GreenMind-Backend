@@ -33,10 +33,25 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
 
 
         modelBuilder.Entity<Farm>()
+            .HasMany(f => f.ExportPlans)
+            .WithOne(p => p.Farm)
+            .HasForeignKey(p => p.FarmId);
+
+		modelBuilder.Entity<Farm>()
             .HasOne(f => f.Owner)
             .WithOne(u => u.Farm)
-            .HasForeignKey<Farm>(f => f.OwnerUserId)
+            .HasForeignKey<Farm>(f=>f.OwnerUserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+		modelBuilder.Entity<Crop>()
+            .HasMany(c => c.ExportPlans)
+            .WithOne(p => p.Crop)
+            .HasForeignKey(p => p.CropId);
+
+        modelBuilder.Entity<Destination>()
+            .HasMany(d => d.ExportPlans)
+            .WithOne(p => p.Destination)
+            .HasForeignKey(p => p.DestinationId);
 
         modelBuilder.Entity<ExportPlan>()
             .HasOne(p => p.Farm)
