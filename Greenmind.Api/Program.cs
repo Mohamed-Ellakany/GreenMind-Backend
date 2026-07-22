@@ -56,7 +56,10 @@ namespace Greenmind.Api
 
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.CustomSchemaIds(type => type.FullName?.Replace('+', '.') ?? type.Name);
+            });
 
             var app = builder.Build();
 

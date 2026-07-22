@@ -102,28 +102,6 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
         return AdminOperationResult<FarmAccountDto>.Success(MapFarm(farm));
     }
 
-    public async Task<PlatformStatisticsDto> GetStatisticsAsync(CancellationToken cancellationToken = default)
-    {
-        var totalFarms = await context.Farms.CountAsync(cancellationToken);
-        var pendingFarms = await context.Farms.CountAsync(farm => !farm.IsApproved, cancellationToken);
-        var activeFarms = await context.Farms.CountAsync(
-            farm => farm.IsApproved && farm.Owner.IsActive,
-            cancellationToken);
-        var inactiveFarms = await context.Farms.CountAsync(
-            farm => farm.IsApproved && !farm.Owner.IsActive,
-            cancellationToken);
-
-        return new PlatformStatisticsDto(
-            totalFarms,
-            pendingFarms,
-            activeFarms,
-            inactiveFarms,
-            await context.Crops.CountAsync(cancellationToken),
-            await context.Destinations.CountAsync(cancellationToken),
-            await context.ExportPlans.CountAsync(cancellationToken),
-            await context.FarmTasks.CountAsync(cancellationToken));
-    }
-
     public async Task<IReadOnlyList<MasterDataItemDto>> GetCropsAsync(CancellationToken cancellationToken = default)
     {
         return await context.Crops

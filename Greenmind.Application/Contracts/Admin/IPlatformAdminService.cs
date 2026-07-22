@@ -20,8 +20,6 @@ public interface IPlatformAdminService
         bool isActive,
         CancellationToken cancellationToken = default);
 
-    Task<PlatformStatisticsDto> GetStatisticsAsync(CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<MasterDataItemDto>> GetCropsAsync(CancellationToken cancellationToken = default);
     Task<AdminOperationResult<MasterDataItemDto>> CreateCropAsync(MasterDataRequest request, CancellationToken cancellationToken = default);
     Task<AdminOperationResult<MasterDataItemDto>> UpdateCropAsync(int id, MasterDataRequest request, CancellationToken cancellationToken = default);

@@ -9,11 +9,11 @@ namespace Greenmind.Api.Controllers.Admin;
 [ApiController]
 [Route("api/admin/statistics")]
 [Authorize(Roles = RoleNames.Admin)]
-public sealed class AdminStatisticsController(IPlatformAdminService adminService) : ControllerBase
+public sealed class AdminStatisticsController(IPlatformStatisticsService statisticsService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PlatformStatisticsDto>> Get(CancellationToken cancellationToken)
     {
-        return Ok(await adminService.GetStatisticsAsync(cancellationToken));
+        return Ok(await statisticsService.GetAsync(cancellationToken));
     }
 }

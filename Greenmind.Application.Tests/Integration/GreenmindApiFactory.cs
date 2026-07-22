@@ -19,6 +19,7 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
 {
     public const string AdminUserId = "integration-admin";
     public const string FarmOwnerUserId = "integration-farm-owner";
+    public const string OtherFarmOwnerUserId = "integration-other-farm-owner";
     public const string AuthenticationScheme = "IntegrationTest";
 
     private readonly string _databaseName = $"greenmind-tests-{Guid.NewGuid():N}";
@@ -74,12 +75,28 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
                 NormalizedUserName = "INTEGRATION.OWNER",
                 FullName = "Integration Farm Owner",
                 IsActive = true
+            },
+            new ApplicationUser
+            {
+                Id = OtherFarmOwnerUserId,
+                UserName = "integration.other-owner",
+                NormalizedUserName = "INTEGRATION.OTHER-OWNER",
+                FullName = "Integration Other Farm Owner",
+                IsActive = true
             });
 
         dbContext.Farms.Add(new Farm
         {
             Name = "Integration Farm",
             OwnerUserId = FarmOwnerUserId,
+            IsApproved = true,
+            ApprovedAtUtc = DateTime.UtcNow
+        });
+
+        dbContext.Farms.Add(new Farm
+        {
+            Name = "Integration Other Farm",
+            OwnerUserId = OtherFarmOwnerUserId,
             IsApproved = true,
             ApprovedAtUtc = DateTime.UtcNow
         });

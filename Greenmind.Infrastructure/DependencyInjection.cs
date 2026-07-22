@@ -1,8 +1,13 @@
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Application.Contracts.Admin;
 using Greenmind.Application.Contracts.MasterData;
+using Greenmind.Application.Contracts.Dashboard;
+using Greenmind.Application.Contracts.Soil;
+using Greenmind.Application.Services;
 using Greenmind.Infrastructure.Admin;
+using Greenmind.Infrastructure.Dashboard;
 using Greenmind.Infrastructure.Persistence.Repositories;
+using Greenmind.Infrastructure.Soil;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Greenmind.Infrastructure;
@@ -21,7 +26,12 @@ public static class DependencyInjection
         services.AddScoped<ISoilMeasurementRepository, SoilMeasurementRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPlatformAdminService, PlatformAdminService>();
+        services.AddScoped<IPlatformStatisticsService, PlatformStatisticsService>();
         services.AddScoped<IMasterDataQueryService, PlatformAdminService>();
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton<ISeasonCalculationService, SeasonCalculationService>();
+        services.AddScoped<IExportPlanDashboardService, ExportPlanDashboardService>();
+        services.AddScoped<ISoilMeasurementService, SoilMeasurementService>();
 
         return services;
     }
