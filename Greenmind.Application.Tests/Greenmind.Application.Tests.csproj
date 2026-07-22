@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Greenmind.Application\Greenmind.Application.csproj" />
+    <ProjectReference Include="..\Greenmind.Api\Greenmind.Api.csproj" />
   </ItemGroup>
 
 </Project>

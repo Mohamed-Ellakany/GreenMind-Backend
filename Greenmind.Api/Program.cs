@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Greenmind.Infrastructure.Agents;
 
 namespace Greenmind.Api
@@ -30,9 +29,6 @@ namespace Greenmind.Api
                 options.SuppressModelStateInvalidFilter = true;
             });
 
-            builder.Services.AddDbContext<Greenmind.Infrastructure.Persistence.GreenmindDbContext>(options =>
-				options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
             builder.Services.AddInfrastructureServices();
 
             builder.Services.AddDbContext<GreenmindDbContext>(options =>
@@ -42,6 +38,22 @@ namespace Greenmind.Api
                 .AddEntityFrameworkStores<GreenmindDbContext>()
                 .AddDefaultTokenProviders();
 
+            builder.Services.ConfigureApplicationCookie(options =>
+            {
+                options.Events.OnRedirectToLogin = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                };
+                options.Events.OnRedirectToAccessDenied = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                };
+            });
+
+            builder.Services.AddAuthorization();
+
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
             builder.Services.AddSwaggerGen();
@@ -50,13 +62,16 @@ namespace Greenmind.Api
 
 			// Configure the HTTP request pipeline.
 
+            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
             app.UseSwagger();
             app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
-            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
-			app.UseHttpsRedirection();
+            app.UseAuthentication();
+
+            app.UseMiddleware<FarmAccountAccessMiddleware>();
 
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 

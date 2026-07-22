@@ -10,11 +10,15 @@ namespace Greenmind.Domain.Entities
     {
         [Required]
         [ForeignKey(nameof(Owner))]
-        public string OwnerUserId { get; set; }   
+        public required string OwnerUserId { get; set; }
 
         [Required]
         [MaxLength(200)]
         public required string Name { get; set; }
+
+        public bool IsApproved { get; set; }
+
+        public DateTime? ApprovedAtUtc { get; set; }
 
         // Navigation
         public ApplicationUser Owner { get; set; } = null!;
