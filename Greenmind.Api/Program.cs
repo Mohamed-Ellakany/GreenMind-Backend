@@ -1,3 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using Greenmind.Infrastructure;
+using Greenmind.Api.Filters;
+using Greenmind.Api.Middleware;
+using Microsoft.AspNetCore.Mvc;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -14,7 +19,21 @@ namespace Greenmind.Api
 
             // Add services to the container.
 
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<ModelStateValidationFilter>();
+                options.Filters.Add<ApiResponseWrappingFilter>();
+            });
+
+            builder.Services.Configure<ApiBehaviorOptions>(options =>
+            {
+                options.SuppressModelStateInvalidFilter = true;
+            });
+
+            builder.Services.AddDbContext<Greenmind.Infrastructure.Persistence.GreenmindDbContext>(options =>
+				options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+            builder.Services.AddInfrastructureServices();
 
             builder.Services.AddDbContext<GreenmindDbContext>(options =>
                  options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -27,9 +46,13 @@ namespace Greenmind.Api
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
+			// Configure the HTTP request pipeline.
 
-            app.UseHttpsRedirection();
+            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
+			app.UseHttpsRedirection();
+
+            app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
             app.UseAuthorization();
 
