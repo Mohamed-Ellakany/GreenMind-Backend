@@ -1,5 +1,5 @@
 using Greenmind.Application.Contracts.Admin;
-using Greenmind.Application.Dtos.Admin;
+using Greenmind.Application.Dtos.MasterData;
 using Greenmind.Domain.Consts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -38,17 +38,16 @@ public sealed class AdminDestinationsController(IPlatformAdminService adminServi
         return ToActionResult(await adminService.UpdateDestinationAsync(id, request, cancellationToken));
     }
 
-    [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    [HttpPatch("{id:int}/status")]
+    public async Task<ActionResult<MasterDataItemDto>> SetStatus(
+        int id,
+        [FromBody] MasterDataStatusRequest request,
+        CancellationToken cancellationToken)
     {
-        var result = await adminService.DeleteDestinationAsync(id, cancellationToken);
-        return result.Status switch
-        {
-            AdminOperationStatus.Succeeded => Ok(new { Deleted = true }),
-            AdminOperationStatus.NotFound => NotFound(result.ErrorMessage),
-            AdminOperationStatus.Conflict => Conflict(result.ErrorMessage),
-            _ => throw new InvalidOperationException("Unsupported admin operation status.")
-        };
+        return ToActionResult(await adminService.SetDestinationStatusAsync(
+            id,
+            request.IsActive!.Value,
+            cancellationToken));
     }
 
     private ActionResult<MasterDataItemDto> ToActionResult(AdminOperationResult<MasterDataItemDto> result) =>

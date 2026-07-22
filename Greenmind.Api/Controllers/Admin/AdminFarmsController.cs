@@ -59,4 +59,8 @@ public sealed class AdminFarmsController(IPlatformAdminService adminService) : C
         };
 }
 
-public sealed record FarmAccountStatusRequest([property: Required] bool? IsActive);
+public sealed class FarmAccountStatusRequest
+{
+    [Required]
+    public bool? IsActive { get; init; }
+}

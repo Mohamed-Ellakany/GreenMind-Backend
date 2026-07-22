@@ -14,6 +14,8 @@ namespace Greenmind.Domain.Entities
         [MaxLength(500)]
         public string? Description { get; set; }
 
+        public bool IsActive { get; set; } = true;
+
         public ICollection<ExportPlan> ExportPlans { get; set; } = new List<ExportPlan>();
 
     }
