@@ -1,5 +1,5 @@
 using Greenmind.Application.Contracts.Persistence;
-using DomainTask = Greenmind.Domain.Entities.Task;
+using DomainTask = Greenmind.Domain.Entities.FarmTask;
 
 namespace Greenmind.Infrastructure.Persistence.Repositories;
 

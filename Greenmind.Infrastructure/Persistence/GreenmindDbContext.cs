@@ -30,6 +30,23 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
           new TaskType { Id = 8, Name = "QualityCheck", Description = "Quality/compliance inspection before export", CreatedAt = new DateTime(2026, 1, 1) }
       );
 
+        modelBuilder.Entity<Crop>().HasData(
+            new Crop { Id = 1, Name = "Strawberry", Description = "Fresh strawberry crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = 2, Name = "Grapes", Description = "Table grapes crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = 3, Name = "Citrus", Description = "Citrus crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = 4, Name = "Potato", Description = "Potato crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = 5, Name = "Onion", Description = "Onion crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = 6, Name = "Green Beans", Description = "Green beans crop for export planning", CreatedAt = new DateTime(2026, 1, 1) }
+        );
+
+        modelBuilder.Entity<Destination>().HasData(
+            new Destination { Id = 1, Name = "Germany", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 2, Name = "Netherlands", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 3, Name = "France", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 4, Name = "Italy", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 5, Name = "Spain", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 6, Name = "Belgium", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) }
+        );
 
 
         modelBuilder.Entity<Farm>()

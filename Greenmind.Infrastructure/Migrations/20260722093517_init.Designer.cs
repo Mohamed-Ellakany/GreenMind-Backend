@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace Greenmind.Infrastructure.Persistence.Migrations
+namespace Greenmind.Infrastructure.Migrations
 {
     [DbContext(typeof(GreenmindDbContext))]
-    [Migration("20260721190823_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260722093517_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

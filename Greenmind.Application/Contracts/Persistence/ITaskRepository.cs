@@ -1,4 +1,4 @@
-using DomainTask = Greenmind.Domain.Entities.Task;
+using DomainTask = Greenmind.Domain.Entities.FarmTask;
 
 namespace Greenmind.Application.Contracts.Persistence;
 
