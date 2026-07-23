@@ -18,7 +18,6 @@ public static class DependencyInjection
         services.AddScoped<ITaskTypeRepository, TaskTypeRepository>();
         services.AddScoped<ISoilMeasurementRepository, SoilMeasurementRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
 
         return services;

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Greenmind.Api.Seed;
 using Microsoft.EntityFrameworkCore;
 using Greenmind.Infrastructure.Agents;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -68,18 +69,17 @@ namespace Greenmind.Api
                 };
             });
 
-            // Authorization policies
-            builder.Services.AddAuthorization(options =>
-            {
-                options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
-                options.AddPolicy("FarmOwner", policy => policy.RequireRole("FarmOwner"));
-            });
+            // Simple role-based authorization
+            builder.Services.AddAuthorization();
 
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
+
+            // Ensure roles and an admin user exist on startup
+            app.EnsureRolesAndAdminAsync().GetAwaiter().GetResult();
 
 			// Configure the HTTP request pipeline.
 
