@@ -109,6 +109,7 @@ namespace Greenmind.Api
 
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
 
