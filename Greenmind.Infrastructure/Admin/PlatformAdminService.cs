@@ -1,12 +1,15 @@
 using Greenmind.Application.Contracts.Admin;
+using Greenmind.Application.Contracts.MasterData;
 using Greenmind.Application.Dtos.Admin;
+using Greenmind.Application.Dtos.MasterData;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Greenmind.Infrastructure.Admin;
 
-public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatformAdminService
+public sealed class PlatformAdminService(GreenmindDbContext context)
+    : IPlatformAdminService, IMasterDataQueryService
 {
     private const int MaximumPageSize = 100;
 
@@ -99,34 +102,17 @@ public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatform
         return AdminOperationResult<FarmAccountDto>.Success(MapFarm(farm));
     }
 
-    public async Task<PlatformStatisticsDto> GetStatisticsAsync(CancellationToken cancellationToken = default)
-    {
-        var totalFarms = await context.Farms.CountAsync(cancellationToken);
-        var pendingFarms = await context.Farms.CountAsync(farm => !farm.IsApproved, cancellationToken);
-        var activeFarms = await context.Farms.CountAsync(
-            farm => farm.IsApproved && farm.Owner.IsActive,
-            cancellationToken);
-        var inactiveFarms = await context.Farms.CountAsync(
-            farm => farm.IsApproved && !farm.Owner.IsActive,
-            cancellationToken);
-
-        return new PlatformStatisticsDto(
-            totalFarms,
-            pendingFarms,
-            activeFarms,
-            inactiveFarms,
-            await context.Crops.CountAsync(cancellationToken),
-            await context.Destinations.CountAsync(cancellationToken),
-            await context.ExportPlans.CountAsync(cancellationToken),
-            await context.FarmTasks.CountAsync(cancellationToken));
-    }
-
     public async Task<IReadOnlyList<MasterDataItemDto>> GetCropsAsync(CancellationToken cancellationToken = default)
     {
         return await context.Crops
             .AsNoTracking()
             .OrderBy(crop => crop.Name)
-            .Select(crop => new MasterDataItemDto(crop.Id, crop.Name, crop.Description, crop.CreatedAt))
+            .Select(crop => new MasterDataItemDto(
+                crop.Id,
+                crop.Name,
+                crop.Description,
+                crop.IsActive,
+                crop.CreatedAt))
             .ToListAsync(cancellationToken);
     }
 
@@ -173,24 +159,20 @@ public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatform
         return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
     }
 
-    public async Task<AdminOperationResult<bool>> DeleteCropAsync(
+    public async Task<AdminOperationResult<MasterDataItemDto>> SetCropStatusAsync(
         int id,
+        bool isActive,
         CancellationToken cancellationToken = default)
     {
         var crop = await context.Crops.FindAsync([id], cancellationToken);
         if (crop is null)
         {
-            return AdminOperationResult<bool>.NotFound("Crop was not found.");
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Crop was not found.");
         }
 
-        if (await context.ExportPlans.AnyAsync(plan => plan.CropId == id, cancellationToken))
-        {
-            return AdminOperationResult<bool>.Conflict("The crop is used by one or more export plans.");
-        }
-
-        context.Crops.Remove(crop);
+        crop.IsActive = isActive;
         await context.SaveChangesAsync(cancellationToken);
-        return AdminOperationResult<bool>.Success(true);
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
     }
 
     public async Task<IReadOnlyList<MasterDataItemDto>> GetDestinationsAsync(
@@ -203,6 +185,7 @@ public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatform
                 destination.Id,
                 destination.Name,
                 destination.Description,
+                destination.IsActive,
                 destination.CreatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -259,24 +242,52 @@ public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatform
         return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
     }
 
-    public async Task<AdminOperationResult<bool>> DeleteDestinationAsync(
+    public async Task<AdminOperationResult<MasterDataItemDto>> SetDestinationStatusAsync(
         int id,
+        bool isActive,
         CancellationToken cancellationToken = default)
     {
         var destination = await context.Destinations.FindAsync([id], cancellationToken);
         if (destination is null)
         {
-            return AdminOperationResult<bool>.NotFound("Destination was not found.");
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Destination was not found.");
         }
 
-        if (await context.ExportPlans.AnyAsync(plan => plan.DestinationId == id, cancellationToken))
-        {
-            return AdminOperationResult<bool>.Conflict("The destination is used by one or more export plans.");
-        }
-
-        context.Destinations.Remove(destination);
+        destination.IsActive = isActive;
         await context.SaveChangesAsync(cancellationToken);
-        return AdminOperationResult<bool>.Success(true);
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
+    }
+
+    public async Task<IReadOnlyList<MasterDataItemDto>> GetActiveCropsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await context.Crops
+            .AsNoTracking()
+            .Where(crop => crop.IsActive)
+            .OrderBy(crop => crop.Name)
+            .Select(crop => new MasterDataItemDto(
+                crop.Id,
+                crop.Name,
+                crop.Description,
+                crop.IsActive,
+                crop.CreatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<MasterDataItemDto>> GetActiveDestinationsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await context.Destinations
+            .AsNoTracking()
+            .Where(destination => destination.IsActive)
+            .OrderBy(destination => destination.Name)
+            .Select(destination => new MasterDataItemDto(
+                destination.Id,
+                destination.Name,
+                destination.Description,
+                destination.IsActive,
+                destination.CreatedAt))
+            .ToListAsync(cancellationToken);
     }
 
     private static FarmAccountDto MapFarm(Farm farm) =>
@@ -292,10 +303,15 @@ public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatform
             farm.CreatedAt);
 
     private static MasterDataItemDto MapMasterData(Crop crop) =>
-        new(crop.Id, crop.Name, crop.Description, crop.CreatedAt);
+        new(crop.Id, crop.Name, crop.Description, crop.IsActive, crop.CreatedAt);
 
     private static MasterDataItemDto MapMasterData(Destination destination) =>
-        new(destination.Id, destination.Name, destination.Description, destination.CreatedAt);
+        new(
+            destination.Id,
+            destination.Name,
+            destination.Description,
+            destination.IsActive,
+            destination.CreatedAt);
 
     private static string? NormalizeDescription(string? description) =>
         string.IsNullOrWhiteSpace(description) ? null : description.Trim();

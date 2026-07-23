@@ -110,12 +110,20 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
 
                     b.ToTable("Crops");
 
@@ -125,6 +133,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Fresh strawberry crop for export planning",
+                            IsActive = true,
                             Name = "Strawberry"
                         },
                         new
@@ -132,6 +141,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 2,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Table grapes crop for export planning",
+                            IsActive = true,
                             Name = "Grapes"
                         },
                         new
@@ -139,6 +149,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 3,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Citrus crop for export planning",
+                            IsActive = true,
                             Name = "Citrus"
                         },
                         new
@@ -146,6 +157,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 4,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Potato crop for export planning",
+                            IsActive = true,
                             Name = "Potato"
                         },
                         new
@@ -153,6 +165,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 5,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Onion crop for export planning",
+                            IsActive = true,
                             Name = "Onion"
                         },
                         new
@@ -160,6 +173,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 6,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Green beans crop for export planning",
+                            IsActive = true,
                             Name = "Green Beans"
                         });
                 });
@@ -179,12 +193,20 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
 
                     b.ToTable("Destinations");
 
@@ -194,6 +216,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
+                            IsActive = true,
                             Name = "Germany"
                         },
                         new
@@ -201,6 +224,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 2,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
+                            IsActive = true,
                             Name = "Netherlands"
                         },
                         new
@@ -208,6 +232,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 3,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
+                            IsActive = true,
                             Name = "France"
                         },
                         new
@@ -215,6 +240,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 4,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
+                            IsActive = true,
                             Name = "Italy"
                         },
                         new
@@ -222,6 +248,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 5,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
+                            IsActive = true,
                             Name = "Spain"
                         },
                         new
@@ -229,6 +256,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 6,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
+                            IsActive = true,
                             Name = "Belgium"
                         },
                         new
@@ -236,6 +264,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 7,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "European Union export market",
+                            IsActive = true,
                             Name = "European Union"
                         },
                         new
@@ -243,6 +272,7 @@ namespace Greenmind.Infrastructure.Migrations
                             Id = 8,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Saudi Arabian export market",
+                            IsActive = true,
                             Name = "Saudi Arabia"
                         });
                 });
@@ -568,6 +598,13 @@ namespace Greenmind.Infrastructure.Migrations
                             ConcurrencyStamp = "7e8c8cce-78f5-4b44-b6aa-40418b037f57",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
+                        },
+                        new
+                        {
+                            Id = "47ab3c36-a117-47eb-a18c-8545dd22cb01",
+                            ConcurrencyStamp = "47ab3c36-a117-47eb-a18c-8545dd22cb01",
+                            Name = "FarmOwner",
+                            NormalizedName = "FARMOWNER"
                         });
                 });
 
