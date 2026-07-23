@@ -1,0 +1,302 @@
+using Greenmind.Application.Contracts.Admin;
+using Greenmind.Application.Dtos.Admin;
+using Greenmind.Domain.Entities;
+using Greenmind.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace Greenmind.Infrastructure.Admin;
+
+public sealed class PlatformAdminService(GreenmindDbContext context) : IPlatformAdminService
+{
+    private const int MaximumPageSize = 100;
+
+    public async Task<PagedResult<FarmAccountDto>> GetFarmsAsync(
+        FarmAccountStatus? status,
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        pageNumber = Math.Max(pageNumber, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaximumPageSize);
+
+        var query = context.Farms.AsNoTracking().AsQueryable();
+
+        query = status switch
+        {
+            FarmAccountStatus.Pending => query.Where(farm => !farm.IsApproved),
+            FarmAccountStatus.Active => query.Where(farm => farm.IsApproved && farm.Owner.IsActive),
+            FarmAccountStatus.Inactive => query.Where(farm => farm.IsApproved && !farm.Owner.IsActive),
+            _ => query
+        };
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(farm => farm.CreatedAt)
+            .ThenBy(farm => farm.Name)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Select(farm => new FarmAccountDto(
+                farm.Id,
+                farm.Name,
+                farm.OwnerUserId,
+                farm.Owner.FullName,
+                farm.Owner.Email,
+                farm.IsApproved,
+                farm.ApprovedAtUtc,
+                farm.Owner.IsActive,
+                farm.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<FarmAccountDto>(items, pageNumber, pageSize, totalCount);
+    }
+
+    public async Task<AdminOperationResult<FarmAccountDto>> ApproveFarmAsync(
+        int farmId,
+        CancellationToken cancellationToken = default)
+    {
+        var farm = await context.Farms
+            .Include(item => item.Owner)
+            .FirstOrDefaultAsync(item => item.Id == farmId, cancellationToken);
+
+        if (farm is null)
+        {
+            return AdminOperationResult<FarmAccountDto>.NotFound("Farm was not found.");
+        }
+
+        if (!farm.IsApproved)
+        {
+            farm.IsApproved = true;
+            farm.ApprovedAtUtc = DateTime.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        return AdminOperationResult<FarmAccountDto>.Success(MapFarm(farm));
+    }
+
+    public async Task<AdminOperationResult<FarmAccountDto>> SetFarmAccountStatusAsync(
+        int farmId,
+        bool isActive,
+        CancellationToken cancellationToken = default)
+    {
+        var farm = await context.Farms
+            .Include(item => item.Owner)
+            .FirstOrDefaultAsync(item => item.Id == farmId, cancellationToken);
+
+        if (farm is null)
+        {
+            return AdminOperationResult<FarmAccountDto>.NotFound("Farm was not found.");
+        }
+
+        if (isActive && !farm.IsApproved)
+        {
+            return AdminOperationResult<FarmAccountDto>.Conflict(
+                "The farm must be approved before its account can be activated.");
+        }
+
+        farm.Owner.IsActive = isActive;
+        await context.SaveChangesAsync(cancellationToken);
+
+        return AdminOperationResult<FarmAccountDto>.Success(MapFarm(farm));
+    }
+
+    public async Task<PlatformStatisticsDto> GetStatisticsAsync(CancellationToken cancellationToken = default)
+    {
+        var totalFarms = await context.Farms.CountAsync(cancellationToken);
+        var pendingFarms = await context.Farms.CountAsync(farm => !farm.IsApproved, cancellationToken);
+        var activeFarms = await context.Farms.CountAsync(
+            farm => farm.IsApproved && farm.Owner.IsActive,
+            cancellationToken);
+        var inactiveFarms = await context.Farms.CountAsync(
+            farm => farm.IsApproved && !farm.Owner.IsActive,
+            cancellationToken);
+
+        return new PlatformStatisticsDto(
+            totalFarms,
+            pendingFarms,
+            activeFarms,
+            inactiveFarms,
+            await context.Crops.CountAsync(cancellationToken),
+            await context.Destinations.CountAsync(cancellationToken),
+            await context.ExportPlans.CountAsync(cancellationToken),
+            await context.FarmTasks.CountAsync(cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<MasterDataItemDto>> GetCropsAsync(CancellationToken cancellationToken = default)
+    {
+        return await context.Crops
+            .AsNoTracking()
+            .OrderBy(crop => crop.Name)
+            .Select(crop => new MasterDataItemDto(crop.Id, crop.Name, crop.Description, crop.CreatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> CreateCropAsync(
+        MasterDataRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var name = request.Name.Trim();
+        if (await context.Crops.AnyAsync(crop => crop.Name.ToUpper() == name.ToUpper(), cancellationToken))
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict("A crop with the same name already exists.");
+        }
+
+        var crop = new Crop { Name = name, Description = NormalizeDescription(request.Description) };
+        await context.Crops.AddAsync(crop, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> UpdateCropAsync(
+        int id,
+        MasterDataRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var crop = await context.Crops.FindAsync([id], cancellationToken);
+        if (crop is null)
+        {
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Crop was not found.");
+        }
+
+        var name = request.Name.Trim();
+        if (await context.Crops.AnyAsync(
+                item => item.Id != id && item.Name.ToUpper() == name.ToUpper(),
+                cancellationToken))
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict("A crop with the same name already exists.");
+        }
+
+        crop.Name = name;
+        crop.Description = NormalizeDescription(request.Description);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
+    }
+
+    public async Task<AdminOperationResult<bool>> DeleteCropAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var crop = await context.Crops.FindAsync([id], cancellationToken);
+        if (crop is null)
+        {
+            return AdminOperationResult<bool>.NotFound("Crop was not found.");
+        }
+
+        if (await context.ExportPlans.AnyAsync(plan => plan.CropId == id, cancellationToken))
+        {
+            return AdminOperationResult<bool>.Conflict("The crop is used by one or more export plans.");
+        }
+
+        context.Crops.Remove(crop);
+        await context.SaveChangesAsync(cancellationToken);
+        return AdminOperationResult<bool>.Success(true);
+    }
+
+    public async Task<IReadOnlyList<MasterDataItemDto>> GetDestinationsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await context.Destinations
+            .AsNoTracking()
+            .OrderBy(destination => destination.Name)
+            .Select(destination => new MasterDataItemDto(
+                destination.Id,
+                destination.Name,
+                destination.Description,
+                destination.CreatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> CreateDestinationAsync(
+        MasterDataRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var name = request.Name.Trim();
+        if (await context.Destinations.AnyAsync(
+                destination => destination.Name.ToUpper() == name.ToUpper(),
+                cancellationToken))
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict(
+                "A destination with the same name already exists.");
+        }
+
+        var destination = new Destination
+        {
+            Name = name,
+            Description = NormalizeDescription(request.Description)
+        };
+
+        await context.Destinations.AddAsync(destination, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> UpdateDestinationAsync(
+        int id,
+        MasterDataRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var destination = await context.Destinations.FindAsync([id], cancellationToken);
+        if (destination is null)
+        {
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Destination was not found.");
+        }
+
+        var name = request.Name.Trim();
+        if (await context.Destinations.AnyAsync(
+                item => item.Id != id && item.Name.ToUpper() == name.ToUpper(),
+                cancellationToken))
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict(
+                "A destination with the same name already exists.");
+        }
+
+        destination.Name = name;
+        destination.Description = NormalizeDescription(request.Description);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
+    }
+
+    public async Task<AdminOperationResult<bool>> DeleteDestinationAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var destination = await context.Destinations.FindAsync([id], cancellationToken);
+        if (destination is null)
+        {
+            return AdminOperationResult<bool>.NotFound("Destination was not found.");
+        }
+
+        if (await context.ExportPlans.AnyAsync(plan => plan.DestinationId == id, cancellationToken))
+        {
+            return AdminOperationResult<bool>.Conflict("The destination is used by one or more export plans.");
+        }
+
+        context.Destinations.Remove(destination);
+        await context.SaveChangesAsync(cancellationToken);
+        return AdminOperationResult<bool>.Success(true);
+    }
+
+    private static FarmAccountDto MapFarm(Farm farm) =>
+        new(
+            farm.Id,
+            farm.Name,
+            farm.OwnerUserId,
+            farm.Owner.FullName,
+            farm.Owner.Email,
+            farm.IsApproved,
+            farm.ApprovedAtUtc,
+            farm.Owner.IsActive,
+            farm.CreatedAt);
+
+    private static MasterDataItemDto MapMasterData(Crop crop) =>
+        new(crop.Id, crop.Name, crop.Description, crop.CreatedAt);
+
+    private static MasterDataItemDto MapMasterData(Destination destination) =>
+        new(destination.Id, destination.Name, destination.Description, destination.CreatedAt);
+
+    private static string? NormalizeDescription(string? description) =>
+        string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+}

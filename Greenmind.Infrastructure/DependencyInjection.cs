@@ -1,4 +1,6 @@
 using Greenmind.Application.Contracts.Persistence;
+using Greenmind.Application.Contracts.Admin;
+using Greenmind.Infrastructure.Admin;
 using Greenmind.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Greenmind.Infrastructure.Services;
@@ -18,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskTypeRepository, TaskTypeRepository>();
         services.AddScoped<ISoilMeasurementRepository, SoilMeasurementRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IPlatformAdminService, PlatformAdminService>();
         services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
 
