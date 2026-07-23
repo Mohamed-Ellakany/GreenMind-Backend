@@ -55,7 +55,6 @@ namespace Greenmind.Api
                     return Task.CompletedTask;
                 };
             });
-
             
             // JWT Authentication
             var jwtKey = builder.Configuration["Jwt:Key"] ?? "dev_secret_key_change_me";
