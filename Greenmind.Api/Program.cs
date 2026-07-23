@@ -7,6 +7,10 @@ using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Greenmind.Infrastructure.Agents;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.Security.Claims;
 
 namespace Greenmind.Api
 {
@@ -52,7 +56,35 @@ namespace Greenmind.Api
                 };
             });
 
-            builder.Services.AddAuthorization();
+            
+            // JWT Authentication
+            var jwtKey = builder.Configuration["Jwt:Key"] ?? "dev_secret_key_change_me";
+            var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    NameClaimType = ClaimTypes.NameIdentifier,
+                    RoleClaimType = ClaimTypes.Role
+                };
+            });
+
+            // Authorization policies
+            builder.Services.AddAuthorization(options =>
+            {
+                options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
+                options.AddPolicy("FarmOwner", policy => policy.RequireRole("FarmOwner"));
+            });
 
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
@@ -78,6 +110,7 @@ namespace Greenmind.Api
 
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
 

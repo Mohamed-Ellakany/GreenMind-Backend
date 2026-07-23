@@ -9,6 +9,7 @@ using Greenmind.Infrastructure.Dashboard;
 using Greenmind.Infrastructure.Persistence.Repositories;
 using Greenmind.Infrastructure.Soil;
 using Microsoft.Extensions.DependencyInjection;
+using Greenmind.Infrastructure.Services;
 
 namespace Greenmind.Infrastructure;
 
@@ -32,6 +33,8 @@ public static class DependencyInjection
         services.AddSingleton<ISeasonCalculationService, SeasonCalculationService>();
         services.AddScoped<IExportPlanDashboardService, ExportPlanDashboardService>();
         services.AddScoped<ISoilMeasurementService, SoilMeasurementService>();
+        services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
+        services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
 
         return services;
     }
