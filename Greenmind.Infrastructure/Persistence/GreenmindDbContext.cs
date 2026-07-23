@@ -1,11 +1,15 @@
 ﻿using Greenmind.Domain.Entities;
+using Greenmind.Domain.Consts.Enums;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Greenmind.Infrastructure.Persistence;
 
-public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options) : DbContext(options)
+public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
+    : IdentityDbContext<ApplicationUser, IdentityRole<int>, int>(options)
 {
-public DbSet<Farm> Farms => Set<Farm>();
+    public DbSet<Farm> Farms => Set<Farm>();
 
     public DbSet<Crop> Crops => Set<Crop>();
 
@@ -19,12 +23,11 @@ public DbSet<Farm> Farms => Set<Farm>();
 
     public DbSet<SoilMeasurement> SoilMeasurements => Set<SoilMeasurement>();
 
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-       
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GreenmindDbContext).Assembly);
 
         modelBuilder.Entity<Farm>()
             .HasMany(f => f.ExportPlans)
@@ -56,13 +59,4 @@ public DbSet<Farm> Farms => Set<Farm>();
             .WithOne(s => s.ExportPlan)
             .HasForeignKey(s => s.ExportPlanId);
     }
-
-
-
-
 }
-
-    
-
-
-
