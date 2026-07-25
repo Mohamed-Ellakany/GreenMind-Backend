@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Greenmind.Domain.Consts.Enums;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -10,6 +11,6 @@ namespace Greenmind.Application.Dtos.AI
         public string Title { get; set; }
         public string Description { get; set; }
         public DateOnly PlannedDate { get; set; }
-        public int Priority { get; set; }
+        public TaskPriority Priority { get; set; }
     }
 }

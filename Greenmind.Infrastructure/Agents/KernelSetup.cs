@@ -13,7 +13,10 @@ public static class KernelSetup
     {
         services.AddHttpClient<IWeatherHttpClient, WeatherHttpClient>(c =>
         {
-            c.BaseAddress = new Uri(config["Weather:BaseUrl"]!);
+            var weatherBaseUrl = config["Weather:BaseUrl"]
+                ?? throw new InvalidOperationException("Weather:BaseUrl is not configured.");
+
+            c.BaseAddress = new Uri(weatherBaseUrl.EndsWith('/') ? weatherBaseUrl : $"{weatherBaseUrl}/");
             c.DefaultRequestHeaders.Add("x-api-key", config["Weather:ApiKey"]);
         });
 

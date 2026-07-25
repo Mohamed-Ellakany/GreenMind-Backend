@@ -17,8 +17,15 @@ public class WeatherHttpClient : IWeatherHttpClient
 
     public async Task<WeatherForecastDto> GetForecastAsync(string city, DateOnly start, DateOnly end)
     {
-        var days = Math.Max(1, (end.ToDateTime(TimeOnly.MinValue) - start.ToDateTime(TimeOnly.MinValue)).Days + 1);
-        
+        if (end < start)
+        {
+            throw new ArgumentException("Forecast end date must be on or after the start date.", nameof(end));
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var lastForecastDate = end < today ? today : end;
+        var days = Math.Max(1, lastForecastDate.DayNumber - today.DayNumber + 1);
+
         days = Math.Min(days, 14);
 
         var url = $"forecast.json?key={_apiKey}&q={Uri.EscapeDataString(city)}&days={days}";

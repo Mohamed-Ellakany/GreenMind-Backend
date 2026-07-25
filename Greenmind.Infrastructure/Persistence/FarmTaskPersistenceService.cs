@@ -44,8 +44,8 @@ public class FarmTaskPersistenceService : IFarmTaskPersistenceService
                 Title = dto.Title,
                 Description = dto.Description,
                 PlannedDate = dto.PlannedDate,
-                Status = Greenmind.Domain.Consts.Enums.TaskStatus.Pending, 
-                Priority = dto.Priority.ToPriorityEnum(),                 
+                Status = Greenmind.Domain.Consts.Enums.TaskStatus.Pending,
+                Priority = dto.Priority,
                 CreatedAt = DateTime.UtcNow
             });
         }
