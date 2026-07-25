@@ -17,7 +17,7 @@ public class FarmTaskPersistenceService : IFarmTaskPersistenceService
         if (agentResponse.Tasks.Count == 0) return;
 
         // Load all TaskTypes once, resolve by name in memory (avoids N queries)
-        var taskTypes = await _db.TaskTypes.ToDictionaryAsync(tt => tt.Name, tt => tt.Id, StringComparer.OrdinalIgnoreCase);
+        var taskTypes = await _db.TaskTypes.AsNoTracking().ToDictionaryAsync(tt => tt.Name, tt => tt.Id, StringComparer.OrdinalIgnoreCase);
 
         var entitiesToAdd = new List<FarmTask>();
 
@@ -30,7 +30,7 @@ public class FarmTaskPersistenceService : IFarmTaskPersistenceService
             }
 
             // Avoid duplicating a task of the same type on the same date for this export plan
-            var alreadyExists = await _db.FarmTasks.AnyAsync(t =>
+            var alreadyExists = await _db.FarmTasks.AsNoTracking().AnyAsync(t =>
                 t.ExportPlanId == exportPlanId &&
                 t.TaskTypeId == taskTypeId &&
                 t.PlannedDate == dto.PlannedDate);

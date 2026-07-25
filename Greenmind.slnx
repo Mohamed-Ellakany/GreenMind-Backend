@@ -1,4 +1,7 @@
 <Solution>
+  <Project Path="Greenmind.Api.Tests/Greenmind.Api.Tests.csproj">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
   <Project Path="Greenmind.Api/Greenmind.Api.csproj" />
   <Project Path="Greenmind.Application.Tests/Greenmind.Application.Tests.csproj" />
   <Project Path="Greenmind.Application/Greenmind.Application.csproj" />

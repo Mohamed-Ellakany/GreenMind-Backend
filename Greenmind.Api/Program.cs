@@ -6,11 +6,14 @@ using Microsoft.AspNetCore.Mvc;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Greenmind.Api.Seed;
+using Microsoft.EntityFrameworkCore;
 using Greenmind.Infrastructure.Agents;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
+// OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
 {
@@ -28,15 +31,40 @@ namespace Greenmind.Api
                 options.Filters.Add<ApiResponseWrappingFilter>();
             });
 
+            // DateOnly JSON converter
+            builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(opts =>
+            {
+                opts.JsonSerializerOptions.Converters.Add(new Greenmind.Api.Json.DateOnlyConverter());
+            });
+
             builder.Services.Configure<ApiBehaviorOptions>(options =>
             {
                 options.SuppressModelStateInvalidFilter = true;
             });
 
+            // Database provider selection: by default use SQL Server in production.
+            var useInMemory = false;
+            if (!string.IsNullOrEmpty(builder.Configuration["UseInMemoryDatabase"]) && bool.TryParse(builder.Configuration["UseInMemoryDatabase"], out var inMem))
+            {
+                useInMemory = inMem;
+            }
+
+            if (useInMemory)
+            {
+                // Use InMemory provider for tests or local scenarios
+                builder.Services.AddDbContext<GreenmindDbContext>(options =>
+                    options.UseInMemoryDatabase(builder.Configuration["InMemoryDatabaseName"] ?? "GreenmindTestDb"));
             builder.Services.AddInfrastructureServices();
 
-            builder.Services.AddDbContext<GreenmindDbContext>(options =>
-                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+                builder.Services.AddInfrastructureServices();
+            }
+            else
+            {
+                builder.Services.AddDbContext<GreenmindDbContext>(options =>
+                    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+                builder.Services.AddInfrastructureServices();
+            }
 
             builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
                 .AddEntityFrameworkStores<GreenmindDbContext>()
@@ -78,12 +106,8 @@ namespace Greenmind.Api
                 };
             });
 
-            // Authorization policies
-            builder.Services.AddAuthorization(options =>
-            {
-                options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
-                options.AddPolicy("FarmOwner", policy => policy.RequireRole("FarmOwner"));
-            });
+            // Simple role-based authorization
+            builder.Services.AddAuthorization();
 
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
@@ -92,7 +116,22 @@ namespace Greenmind.Api
                 options.CustomSchemaIds(type => type.FullName?.Replace('+', '.') ?? type.Name);
             });
 
+            // Register daily planning hosted service
+            builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+
             var app = builder.Build();
+
+            // Ensure roles and an admin user exist on startup unless explicitly skipped (useful for tests)
+            var skipSeeding = false;
+            if (!string.IsNullOrEmpty(app.Configuration["SkipSeeding"]) && bool.TryParse(app.Configuration["SkipSeeding"], out var parsed))
+            {
+                skipSeeding = parsed;
+            }
+
+            if (!skipSeeding)
+            {
+                app.EnsureRolesAndAdminAsync().GetAwaiter().GetResult();
+            }
 
 			// Configure the HTTP request pipeline.
 
