@@ -54,6 +54,7 @@ namespace Greenmind.Api
                 // Use InMemory provider for tests or local scenarios
                 builder.Services.AddDbContext<GreenmindDbContext>(options =>
                     options.UseInMemoryDatabase(builder.Configuration["InMemoryDatabaseName"] ?? "GreenmindTestDb"));
+            builder.Services.AddInfrastructureServices();
 
                 builder.Services.AddInfrastructureServices();
             }
@@ -69,6 +70,20 @@ namespace Greenmind.Api
                 .AddEntityFrameworkStores<GreenmindDbContext>()
                 .AddDefaultTokenProviders();
 
+            builder.Services.ConfigureApplicationCookie(options =>
+            {
+                options.Events.OnRedirectToLogin = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                };
+                options.Events.OnRedirectToAccessDenied = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                };
+            });
+            
             // JWT Authentication
             var jwtKey = builder.Configuration["Jwt:Key"] ?? "dev_secret_key_change_me";
             var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
@@ -96,7 +111,10 @@ namespace Greenmind.Api
 
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.CustomSchemaIds(type => type.FullName?.Replace('+', '.') ?? type.Name);
+            });
 
             // Register daily planning hosted service
             builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
@@ -117,13 +135,16 @@ namespace Greenmind.Api
 
 			// Configure the HTTP request pipeline.
 
+            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
             app.UseSwagger();
             app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
-            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
-			app.UseHttpsRedirection();
+            app.UseAuthentication();
+
+            app.UseMiddleware<FarmAccountAccessMiddleware>();
 
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 

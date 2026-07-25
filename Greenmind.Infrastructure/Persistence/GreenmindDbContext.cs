@@ -1,4 +1,6 @@
 ﻿using Greenmind.Domain.Entities;
+using Greenmind.Domain.Consts;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +20,38 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<IdentityRole>().HasData(
+            new IdentityRole
+            {
+                Id = "7e8c8cce-78f5-4b44-b6aa-40418b037f57",
+                Name = RoleNames.Admin,
+                NormalizedName = RoleNames.Admin.ToUpperInvariant(),
+                ConcurrencyStamp = "7e8c8cce-78f5-4b44-b6aa-40418b037f57"
+            },
+            new IdentityRole
+            {
+                Id = "47ab3c36-a117-47eb-a18c-8545dd22cb01",
+                Name = RoleNames.FarmOwner,
+                NormalizedName = RoleNames.FarmOwner.ToUpperInvariant(),
+                ConcurrencyStamp = "47ab3c36-a117-47eb-a18c-8545dd22cb01"
+            });
+
+        modelBuilder.Entity<Crop>()
+            .HasIndex(crop => crop.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<Crop>()
+            .Property(crop => crop.IsActive)
+            .HasDefaultValue(true);
+
+        modelBuilder.Entity<Destination>()
+            .HasIndex(destination => destination.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<Destination>()
+            .Property(destination => destination.IsActive)
+            .HasDefaultValue(true);
 
         modelBuilder.Entity<TaskType>().HasData(
           new TaskType { Id = 1, Name = "Irrigation", Description = "Watering schedule and management", CreatedAt = new DateTime(2026, 1, 1) },
@@ -45,7 +79,9 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
             new Destination { Id = 3, Name = "France", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
             new Destination { Id = 4, Name = "Italy", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
             new Destination { Id = 5, Name = "Spain", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
-            new Destination { Id = 6, Name = "Belgium", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) }
+            new Destination { Id = 6, Name = "Belgium", Description = "EU destination market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 7, Name = "European Union", Description = "European Union export market", CreatedAt = new DateTime(2026, 1, 1) },
+            new Destination { Id = 8, Name = "Saudi Arabia", Description = "Saudi Arabian export market", CreatedAt = new DateTime(2026, 1, 1) }
         );
 
 
