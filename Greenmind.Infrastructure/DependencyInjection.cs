@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<ITaskTypeRepository, TaskTypeRepository>();
         services.AddScoped<ISoilMeasurementRepository, SoilMeasurementRepository>();
+        services.AddScoped<Greenmind.Application.Services.IFuturePlannedDaysCalculationService, FuturePlannedDaysCalculationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPlatformAdminService, PlatformAdminService>();
         services.AddScoped<IPlatformStatisticsService, PlatformStatisticsService>();
