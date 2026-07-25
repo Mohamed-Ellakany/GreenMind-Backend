@@ -39,9 +39,9 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                 - Do not duplicate a task type on a date if taskContext.existingTasks already has an equivalent for that date.
                 - Task types: Irrigation, Fertilization, PestControl, Pruning, SoilTest, Harvest, ExportPrep, QualityCheck.
 
-                Output: after gathering necessary info via tools, respond with ONLY valid JSON matching:
+                Output:  after gathering necessary info via tools, respond with ONLY valid JSON matching:
                 { "tasks": [ { "taskTypeName": "", "title": "", "description": "", "plannedDate": "yyyy-MM-dd", "priority": "Low|Medium|High|Critical" } ] }
-                No commentary, no markdown, no explanation outside the JSON.
+                No commentary, no markdown, no explanation outside the JSON and all output must be in arabic .
                 """;
         }
 

@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Greenmind.Infrastructure.Agents
 {
@@ -47,7 +48,9 @@ namespace Greenmind.Infrastructure.Agents
 
             var response = JsonSerializer.Deserialize<AgentResponse>(json, new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                NumberHandling = JsonNumberHandling.AllowReadingFromString,
+                Converters = { new JsonStringEnumConverter() }
             }) ?? new AgentResponse();
 
             response.Tasks = response.Tasks
