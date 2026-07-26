@@ -13,7 +13,7 @@ namespace Greenmind.Infrastructure.Persistence.Mapping
             Title = entity.Title,
             Description = entity.Description ?? string.Empty,
             PlannedDate = entity.PlannedDate,
-            Priority = (int) entity.Priority   
+            Priority = entity.Priority   
         };
 
         public static TaskPriority ToPriorityEnum(this string priority) =>

@@ -23,7 +23,19 @@ public class JwtTokenService : IJwtTokenService
         var audience = _config["Jwt:Audience"];
         var expiresMinutes = int.TryParse(_config["Jwt:ExpiryMinutes"], out var m) ? m : 60;
 
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        var keyBytes = Encoding.UTF8.GetBytes(key);
+        // Ensure key is at least 256 bits (32 bytes) for HS256. If shorter, expand deterministically.
+        if (keyBytes.Length < 32)
+        {
+            var expanded = new byte[32];
+            for (int i = 0; i < expanded.Length; i++)
+            {
+                expanded[i] = keyBytes[i % keyBytes.Length];
+            }
+            keyBytes = expanded;
+        }
+
+        var securityKey = new SymmetricSecurityKey(keyBytes);
         var creds = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
