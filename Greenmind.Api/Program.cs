@@ -23,6 +23,19 @@ namespace Greenmind.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
+
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll",
+                    policy =>
+                    {
+                        policy.AllowAnyOrigin()
+                              .AllowAnyMethod()
+                              .AllowAnyHeader();
+                    });
+            });
+
+
             // Add services to the container.
 
             builder.Services.AddControllers(options =>
@@ -106,6 +119,10 @@ namespace Greenmind.Api
                 };
             });
 
+
+            
+          
+
             // Simple role-based authorization
             builder.Services.AddAuthorization();
 
@@ -120,6 +137,8 @@ namespace Greenmind.Api
             builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
 
             var app = builder.Build();
+
+            app.UseCors("AllowAll");
 
             // Ensure roles and an admin user exist on startup unless explicitly skipped (useful for tests)
             var skipSeeding = false;
