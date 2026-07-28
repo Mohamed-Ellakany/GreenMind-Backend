@@ -8,6 +8,14 @@ using Greenmind.Domain.Entities;
 using Greenmind.Api.Models;
 using Microsoft.AspNetCore.Identity;
 using Xunit;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
+using Greenmind.Application.Contracts.Api;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Greenmind.Api.Tests;
 
@@ -19,16 +27,20 @@ public class TasksIntegrationTests : IClassFixture<WebApplicationFactory<Program
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.UseEnvironment("Testing");
+            builder.ConfigureLogging(logging => logging.ClearProviders());
             builder.ConfigureServices(services =>
             {
-                var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<GreenmindDbContext>));
-                if (descriptor != null) services.Remove(descriptor);
+                services.RemoveAll<GreenmindDbContext>();
+                services.RemoveAll<DbContextOptions<GreenmindDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<GreenmindDbContext>>();
                 services.AddDbContext<GreenmindDbContext>(opts => opts.UseInMemoryDatabase("TasksTestDb"));
+                services.AddDataProtection().UseEphemeralDataProtectionProvider();
             });
         });
     }
 
-    private async Task<string> CreateAndLoginOwnerAsync(string email)
+    private async Task<(string Token, int TaskId)> CreateAndLoginOwnerAsync(string email)
     {
         using var scope = _factory.Services.CreateScope();
         var services = scope.ServiceProvider;
@@ -42,16 +54,34 @@ public class TasksIntegrationTests : IClassFixture<WebApplicationFactory<Program
         await userManager.CreateAsync(user, "P@ssword123");
         await userManager.AddToRoleAsync(user, "FarmOwner");
 
-        var farm = new Farm { Name = "Owner Farm", OwnerUserId = user.Id };
+        var farm = new Farm
+        {
+            Name = "Owner Farm",
+            OwnerUserId = user.Id,
+            IsApproved = true,
+            ApprovedAtUtc = DateTime.UtcNow
+        };
         db.Farms.Add(farm);
         await db.SaveChangesAsync();
+
+        if (!await db.TaskTypes.AnyAsync(item => item.Id == 1))
+        {
+            db.TaskTypes.Add(new Greenmind.Domain.Entities.TaskType
+            {
+                Id = 1,
+                Name = "Irrigation",
+                Description = "Watering schedule and management"
+            });
+            await db.SaveChangesAsync();
+        }
 
         var export = new ExportPlan { Name = "Export1", FarmId = farm.Id, CropId = 1, DestinationId = 1, Governorate = "G", City = "C", Latitude = 0, Longitude = 0, AreaInFeddan = 1, PlantingDate = DateOnly.FromDateTime(DateTime.UtcNow), ExpectedHarvestDate = DateOnly.FromDateTime(DateTime.UtcNow), ExpectedExportDate = DateOnly.FromDateTime(DateTime.UtcNow), Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress };
         db.ExportPlans.Add(export);
         await db.SaveChangesAsync();
 
         // add tasks
-        db.FarmTasks.Add(new FarmTask { ExportPlanId = export.Id, TaskTypeId = 1, Title = "T1", PlannedDate = DateOnly.FromDateTime(DateTime.UtcNow), Status = Greenmind.Domain.Consts.Enums.TaskStatus.Pending, Priority = Greenmind.Domain.Consts.Enums.TaskPriority.Medium, CreatedAt = DateTime.UtcNow });
+        var task = new FarmTask { ExportPlanId = export.Id, TaskTypeId = 1, Title = "T1", PlannedDate = DateOnly.FromDateTime(DateTime.UtcNow), Status = Greenmind.Domain.Consts.Enums.TaskStatus.Pending, Priority = Greenmind.Domain.Consts.Enums.TaskPriority.Medium, CreatedAt = DateTime.UtcNow };
+        db.FarmTasks.Add(task);
         await db.SaveChangesAsync();
 
         // login to get token
@@ -59,20 +89,23 @@ public class TasksIntegrationTests : IClassFixture<WebApplicationFactory<Program
         var login = new LoginRequest { Email = email, Password = "P@ssword123" };
         var res = await client.PostAsJsonAsync("/api/auth/login", login);
         res.EnsureSuccessStatusCode();
-        var body = await res.Content.ReadFromJsonAsync<LoginResponse>();
-        return body!.Token;
+        var body = await res.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        return (body!.Data!.Token, task.Id);
     }
 
     [Fact]
     public async Task Owner_CanList_And_Update_Task()
     {
-        var token = await CreateAndLoginOwnerAsync("owner1@test.local");
+        var owner = await CreateAndLoginOwnerAsync("owner1@test.local");
         var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner.Token);
 
         var listRes = await client.GetAsync("/api/tasks");
         listRes.EnsureSuccessStatusCode();
-        var items = await listRes.Content.ReadFromJsonAsync<List<TaskDto>>();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        jsonOptions.Converters.Add(new JsonStringEnumConverter());
+        var response = await listRes.Content.ReadFromJsonAsync<ApiResponse<List<TaskDto>>>(jsonOptions);
+        var items = response?.Data;
         Assert.NotNull(items);
         Assert.NotEmpty(items);
 
@@ -86,17 +119,17 @@ public class TasksIntegrationTests : IClassFixture<WebApplicationFactory<Program
     public async Task Owner_Cannot_Update_Task_NotOwned()
     {
         // create owner A and task
-        var tokenA = await CreateAndLoginOwnerAsync("ownerA@test.local");
+        var ownerA = await CreateAndLoginOwnerAsync("ownerA@test.local");
 
         // create owner B and login
-        var tokenB = await CreateAndLoginOwnerAsync("ownerB@test.local");
+        var ownerB = await CreateAndLoginOwnerAsync("ownerB@test.local");
 
         var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenB);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerB.Token);
 
-        // ownerB tries to update ownerA's task id 1 (likely)
+        // Owner B tries to update Owner A's task.
         var patch = new UpdateTaskRequest { Status = "Completed", ActualDate = DateOnly.FromDateTime(DateTime.UtcNow), Notes = "Done" };
-        var patchRes = await client.PatchAsJsonAsync($"/api/tasks/1", patch);
+        var patchRes = await client.PatchAsJsonAsync($"/api/tasks/{ownerA.TaskId}", patch);
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, patchRes.StatusCode);
     }
 }

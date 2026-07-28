@@ -6,12 +6,13 @@ using Greenmind.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Greenmind.Domain.Consts.Enums;
+using Greenmind.Domain.Consts;
 
 namespace Greenmind.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "FarmOwner,PlatformAdmin")]
+[Authorize(Roles = RoleNames.FarmOwner + "," + RoleNames.Admin)]
 public class TasksController : ControllerBase
 {
     private readonly GreenmindDbContext _db;
@@ -25,7 +26,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] TaskQueryParams query)
     {
         var userFarmIdClaim = User.FindFirst("farmId")?.Value;
-        if (string.IsNullOrEmpty(userFarmIdClaim) && !User.IsInRole("PlatformAdmin"))
+        if (string.IsNullOrEmpty(userFarmIdClaim) && !User.IsInRole(RoleNames.Admin))
             return Forbid();
 
         var farmId = userFarmIdClaim is null ? (int?)null : int.Parse(userFarmIdClaim);
@@ -35,7 +36,7 @@ public class TasksController : ControllerBase
             .Include(t => t.ExportPlan)
             .AsQueryable();
 
-        if (!User.IsInRole("PlatformAdmin"))
+        if (!User.IsInRole(RoleNames.Admin))
         {
             q = q.Where(t => t.ExportPlan.FarmId == farmId);
         }
@@ -95,7 +96,7 @@ public class TasksController : ControllerBase
         if (task == null) return NotFound();
 
         // Ownership check: platform admin can update any, farm owners only own their farm tasks
-        if (!User.IsInRole("PlatformAdmin"))
+        if (!User.IsInRole(RoleNames.Admin))
         {
             if (string.IsNullOrEmpty(userFarmIdClaim)) return Forbid();
             var farmId = int.Parse(userFarmIdClaim);

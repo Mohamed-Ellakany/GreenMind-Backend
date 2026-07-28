@@ -18,22 +18,14 @@ public class JwtTokenService : IJwtTokenService
 
     public string CreateToken(IEnumerable<Claim> claims)
     {
-        var key = _config["Jwt:Key"] ?? "dev_secret_key_change_me";
+        var key = _config["Jwt:Key"] ?? "greenmind_development_only_key_32_bytes";
         var issuer = _config["Jwt:Issuer"];
         var audience = _config["Jwt:Audience"];
         var expiresMinutes = int.TryParse(_config["Jwt:ExpiryMinutes"], out var m) ? m : 60;
 
         var keyBytes = Encoding.UTF8.GetBytes(key);
-        // Ensure key is at least 256 bits (32 bytes) for HS256. If shorter, expand deterministically.
         if (keyBytes.Length < 32)
-        {
-            var expanded = new byte[32];
-            for (int i = 0; i < expanded.Length; i++)
-            {
-                expanded[i] = keyBytes[i % keyBytes.Length];
-            }
-            keyBytes = expanded;
-        }
+            throw new InvalidOperationException("Jwt:Key must be at least 32 bytes.");
 
         var securityKey = new SymmetricSecurityKey(keyBytes);
         var creds = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);

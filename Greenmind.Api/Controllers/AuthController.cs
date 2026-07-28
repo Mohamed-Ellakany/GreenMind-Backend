@@ -4,6 +4,7 @@ using Greenmind.Domain.Entities;
 using Greenmind.Api.Models;
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Greenmind.Api.Controllers;
 
@@ -132,9 +133,15 @@ public class AuthController : ControllerBase
                 claims.Add(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, r));
         }
 
-        if (user.Farm is not null)
+        var farmId = await _db.Farms
+            .AsNoTracking()
+            .Where(farm => farm.OwnerUserId == user.Id)
+            .Select(farm => (int?)farm.Id)
+            .SingleOrDefaultAsync();
+
+        if (farmId.HasValue)
         {
-            claims.Add(new System.Security.Claims.Claim("farmId", user.Farm.Id.ToString()));
+            claims.Add(new System.Security.Claims.Claim("farmId", farmId.Value.ToString()));
         }
 
         var token = _jwtService.CreateToken(claims);

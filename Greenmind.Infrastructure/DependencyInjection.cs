@@ -12,6 +12,8 @@ using Greenmind.Infrastructure.Persistence.Repositories;
 using Greenmind.Infrastructure.Soil;
 using Microsoft.Extensions.DependencyInjection;
 using Greenmind.Infrastructure.Services;
+using Greenmind.Application.Contracts.Planning;
+using Greenmind.Infrastructure.Planning;
 
 namespace Greenmind.Infrastructure;
 
@@ -37,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IExportPlanDashboardService, ExportPlanDashboardService>();
         services.AddScoped<IExportPlanService, ExportPlanService>();
         services.AddScoped<ISoilMeasurementService, SoilMeasurementService>();
+        services.AddScoped<IExportPlanPlanningService, ExportPlanPlanningService>();
         services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
 

@@ -17,4 +17,14 @@ public interface IExportPlanService
         int exportPlanId,
         string ownerUserId,
         CancellationToken cancellationToken = default);
+
+    Task<ExportPlanResult<PlanningStatusDto>> GetPlanningStatusAsync(
+        int exportPlanId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<ExportPlanResult<PlanningStatusDto>> RetryPlanningAsync(
+        int exportPlanId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default);
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Hosting;
 using System.Threading.Tasks;
 using Greenmind.Domain.Entities;
+using Greenmind.Domain.Consts;
 
 namespace Greenmind.Api.Seed;
 
@@ -17,7 +18,7 @@ public static class SeedExtensions
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
-        var roles = new[] { "PlatformAdmin", "FarmOwner" };
+        var roles = new[] { RoleNames.Admin, RoleNames.FarmOwner };
         foreach (var r in roles)
         {
             if (!await roleManager.RoleExistsAsync(r))
@@ -40,8 +41,14 @@ public static class SeedExtensions
             var createRes = await userManager.CreateAsync(admin, pw);
             if (createRes.Succeeded)
             {
-                await userManager.AddToRoleAsync(admin, "PlatformAdmin");
+                await userManager.AddToRoleAsync(admin, RoleNames.Admin);
             }
+        }
+        else if (!await userManager.IsInRoleAsync(admin, RoleNames.Admin))
+        {
+            await userManager.AddToRoleAsync(admin, RoleNames.Admin);
+            if (await userManager.IsInRoleAsync(admin, "PlatformAdmin"))
+                await userManager.RemoveFromRoleAsync(admin, "PlatformAdmin");
         }
     }
 }

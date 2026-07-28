@@ -8,6 +8,12 @@ using Greenmind.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using System.IdentityModel.Tokens.Jwt;
 using Xunit;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
+using Greenmind.Application.Contracts.Api;
 
 namespace Greenmind.Api.Tests;
 
@@ -19,14 +25,17 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.UseEnvironment("Testing");
+            builder.ConfigureLogging(logging => logging.ClearProviders());
             builder.ConfigureServices(services =>
             {
-                // Replace DB with InMemory for tests
-                var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<GreenmindDbContext>));
-                if (descriptor != null) services.Remove(descriptor);
+                services.RemoveAll<GreenmindDbContext>();
+                services.RemoveAll<DbContextOptions<GreenmindDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<GreenmindDbContext>>();
 
                 services.AddDbContext<GreenmindDbContext>(options =>
                     options.UseInMemoryDatabase("AuthTestDb"));
+                services.AddDataProtection().UseEphemeralDataProtectionProvider();
             });
         });
     }
@@ -60,12 +69,12 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
         var response = await client.PostAsJsonAsync("/api/auth/login", login);
         response.EnsureSuccessStatusCode();
 
-        var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
-        Assert.NotNull(body);
-        Assert.False(string.IsNullOrWhiteSpace(body!.Token));
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        Assert.NotNull(body?.Data);
+        Assert.False(string.IsNullOrWhiteSpace(body!.Data!.Token));
 
         var handler = new JwtSecurityTokenHandler();
-        var token = handler.ReadJwtToken(body.Token);
+        var token = handler.ReadJwtToken(body.Data.Token);
 
         var sub = token.Claims.SingleOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
         Assert.NotNull(sub);

@@ -5,6 +5,13 @@ using Microsoft.EntityFrameworkCore;
 using Greenmind.Infrastructure.Persistence;
 using Greenmind.Api.Models;
 using Xunit;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
+using Greenmind.Application.Contracts.Api;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Greenmind.Api.Tests;
 
@@ -16,14 +23,19 @@ public class RegistrationIntegrationTests : IClassFixture<WebApplicationFactory<
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.UseEnvironment("Testing");
+            builder.ConfigureLogging(logging => logging.ClearProviders());
             builder.ConfigureServices(services =>
             {
-                // Remove the existing DbContext registration
-                var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<GreenmindDbContext>));
-                if (descriptor != null) services.Remove(descriptor);
+                services.RemoveAll<GreenmindDbContext>();
+                services.RemoveAll<DbContextOptions<GreenmindDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<GreenmindDbContext>>();
 
                 services.AddDbContext<GreenmindDbContext>(options =>
-                    options.UseInMemoryDatabase("TestDb"));
+                    options.UseInMemoryDatabase("TestDb")
+                        .ConfigureWarnings(warnings =>
+                            warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+                services.AddDataProtection().UseEphemeralDataProtectionProvider();
             });
         });
     }
@@ -44,8 +56,8 @@ public class RegistrationIntegrationTests : IClassFixture<WebApplicationFactory<
         var response = await client.PostAsJsonAsync("/api/auth/register", request);
         response.EnsureSuccessStatusCode();
 
-        var created = await response.Content.ReadFromJsonAsync<RegisterResponse>();
-        Assert.NotNull(created);
+        var created = await response.Content.ReadFromJsonAsync<ApiResponse<RegisterResponse>>();
+        Assert.NotNull(created?.Data);
 
         // verify DB state
         using var scope = _factory.Services.CreateScope();

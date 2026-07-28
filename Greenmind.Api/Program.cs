@@ -7,12 +7,12 @@ using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Greenmind.Api.Seed;
-using Microsoft.EntityFrameworkCore;
 using Greenmind.Infrastructure.Agents;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -48,6 +48,7 @@ namespace Greenmind.Api
             builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(opts =>
             {
                 opts.JsonSerializerOptions.Converters.Add(new Greenmind.Api.Json.DateOnlyConverter());
+                opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
 
             builder.Services.Configure<ApiBehaviorOptions>(options =>
@@ -67,8 +68,6 @@ namespace Greenmind.Api
                 // Use InMemory provider for tests or local scenarios
                 builder.Services.AddDbContext<GreenmindDbContext>(options =>
                     options.UseInMemoryDatabase(builder.Configuration["InMemoryDatabaseName"] ?? "GreenmindTestDb"));
-            builder.Services.AddInfrastructureServices();
-
                 builder.Services.AddInfrastructureServices();
             }
             else
@@ -98,7 +97,7 @@ namespace Greenmind.Api
             });
             
             // JWT Authentication
-            var jwtKey = builder.Configuration["Jwt:Key"] ?? "dev_secret_key_change_me";
+            var jwtKey = builder.Configuration["Jwt:Key"] ?? "greenmind_development_only_key_32_bytes";
             var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
             builder.Services.AddAuthentication(options =>
@@ -133,8 +132,12 @@ namespace Greenmind.Api
                 options.CustomSchemaIds(type => type.FullName?.Replace('+', '.') ?? type.Name);
             });
 
-            // Register daily planning hosted service
-            builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+            var planningEnabled = builder.Configuration.GetValue("Planning:Enabled", true);
+            if (planningEnabled && !builder.Environment.IsEnvironment("Testing"))
+            {
+                builder.Services.AddHostedService<Greenmind.Api.HostedServices.InitialExportPlanPlanningService>();
+                builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+            }
 
             var app = builder.Build();
 
@@ -167,7 +170,6 @@ namespace Greenmind.Api
 
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
-            app.UseAuthentication();
             app.UseAuthorization();
 
 

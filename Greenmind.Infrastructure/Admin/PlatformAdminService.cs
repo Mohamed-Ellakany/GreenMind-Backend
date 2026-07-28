@@ -70,8 +70,12 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
         {
             farm.IsApproved = true;
             farm.ApprovedAtUtc = DateTime.UtcNow;
-            await context.SaveChangesAsync(cancellationToken);
         }
+
+        // Registration keeps the owner inactive while the farm is pending.
+        // Approval is the transition that grants the regular user access.
+        farm.Owner.IsActive = true;
+        await context.SaveChangesAsync(cancellationToken);
 
         return AdminOperationResult<FarmAccountDto>.Success(MapFarm(farm));
     }

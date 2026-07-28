@@ -28,6 +28,14 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         var created = await ReadDataAsync<ExportPlanDetailsDto>(createResponse);
         Assert.Equal("Summer Strawberry Plan", created.Name);
         Assert.Equal("Strawberry", created.Crop);
+        Assert.Equal(ExportPlanStatus.Planning.ToString(), created.Status);
+        Assert.Equal(PlanningGenerationStatus.Pending.ToString(), created.PlanningStatus);
+        Assert.Equal(0, created.GeneratedTaskCount);
+
+        var planningResponse = await client.GetAsync(
+            $"/api/farm-owner/export-plans/{created.Id}/planning-status");
+        var planning = await ReadDataAsync<PlanningStatusDto>(planningResponse);
+        Assert.Equal(PlanningGenerationStatus.Pending.ToString(), planning.Status);
 
         var listResponse = await client.GetAsync("/api/farm-owner/export-plans");
         var plans = await ReadDataAsync<List<ExportPlanListItemDto>>(listResponse);

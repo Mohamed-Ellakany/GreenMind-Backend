@@ -59,8 +59,11 @@ public sealed class ExportPlanService(GreenmindDbContext dbContext) : IExportPla
             PlantingDate = request.PlantingDate!.Value,
             ExpectedHarvestDate = request.ExpectedHarvestDate!.Value,
             ExpectedExportDate = request.ExpectedExportDate!.Value,
-            Status = request.Status!.Value,
-            Notes = NormalizeNotes(request.Notes)
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.Planning,
+            Notes = NormalizeNotes(request.Notes),
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Pending,
+            PlanningRequestedAtUtc = DateTime.UtcNow,
+            NextPlanningAttemptAtUtc = DateTime.UtcNow
         };
 
         dbContext.ExportPlans.Add(exportPlan);
@@ -85,7 +88,9 @@ public sealed class ExportPlanService(GreenmindDbContext dbContext) : IExportPla
                 plan.PlantingDate,
                 plan.ExpectedHarvestDate,
                 plan.ExpectedExportDate,
-                plan.Status.ToString()))
+                plan.Status.ToString(),
+                plan.PlanningStatus.ToString(),
+                plan.GeneratedTaskCount))
             .ToListAsync(cancellationToken);
 
     public async Task<ExportPlanResult<ExportPlanDetailsDto>> GetByIdAsync(
@@ -112,12 +117,64 @@ public sealed class ExportPlanService(GreenmindDbContext dbContext) : IExportPla
                 item.ExpectedHarvestDate,
                 item.ExpectedExportDate,
                 item.Status.ToString(),
-                item.Notes))
+                item.Notes,
+                item.PlanningStatus.ToString(),
+                item.GeneratedTaskCount,
+                item.PlanningFailureMessage))
             .SingleOrDefaultAsync(cancellationToken);
 
         return plan is null
             ? ExportPlanResult<ExportPlanDetailsDto>.NotFound()
             : ExportPlanResult<ExportPlanDetailsDto>.Success(plan);
+    }
+
+    public async Task<ExportPlanResult<PlanningStatusDto>> GetPlanningStatusAsync(
+        int exportPlanId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await dbContext.ExportPlans
+            .AsNoTracking()
+            .Where(plan => plan.Id == exportPlanId && plan.Farm.OwnerUserId == ownerUserId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return plan is null
+            ? ExportPlanResult<PlanningStatusDto>.NotFound()
+            : ExportPlanResult<PlanningStatusDto>.Success(MapPlanningStatus(plan));
+    }
+
+    public async Task<ExportPlanResult<PlanningStatusDto>> RetryPlanningAsync(
+        int exportPlanId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await dbContext.ExportPlans
+            .SingleOrDefaultAsync(item =>
+                item.Id == exportPlanId && item.Farm.OwnerUserId == ownerUserId,
+                cancellationToken);
+
+        if (plan is null)
+        {
+            return ExportPlanResult<PlanningStatusDto>.NotFound();
+        }
+
+        if (plan.PlanningStatus != Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Failed)
+        {
+            return ExportPlanResult<PlanningStatusDto>.InvalidReference(
+                nameof(plan.PlanningStatus),
+                "Only failed planning jobs can be retried.");
+        }
+
+        plan.PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Pending;
+        plan.PlanningRequestedAtUtc = DateTime.UtcNow;
+        plan.PlanningStartedAtUtc = null;
+        plan.PlanningCompletedAtUtc = null;
+        plan.NextPlanningAttemptAtUtc = DateTime.UtcNow;
+        plan.PlanningAttemptCount = 0;
+        plan.PlanningFailureMessage = null;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return ExportPlanResult<PlanningStatusDto>.Success(MapPlanningStatus(plan));
     }
 
     private async Task<ExportPlanDetailsDto> MapDetailsAsync(int exportPlanId, CancellationToken cancellationToken) =>
@@ -140,8 +197,21 @@ public sealed class ExportPlanService(GreenmindDbContext dbContext) : IExportPla
                 plan.ExpectedHarvestDate,
                 plan.ExpectedExportDate,
                 plan.Status.ToString(),
-                plan.Notes))
+                plan.Notes,
+                plan.PlanningStatus.ToString(),
+                plan.GeneratedTaskCount,
+                plan.PlanningFailureMessage))
             .SingleAsync(cancellationToken));
+
+    private static PlanningStatusDto MapPlanningStatus(ExportPlan plan) => new(
+        plan.Id,
+        plan.PlanningStatus.ToString(),
+        plan.PlanningAttemptCount,
+        plan.GeneratedTaskCount,
+        plan.PlanningRequestedAtUtc,
+        plan.PlanningStartedAtUtc,
+        plan.PlanningCompletedAtUtc,
+        plan.PlanningFailureMessage);
 
     private static string? NormalizeNotes(string? notes) =>
         string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
