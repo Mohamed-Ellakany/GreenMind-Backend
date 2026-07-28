@@ -54,6 +54,19 @@ namespace Greenmind.Domain.Entities
         [MaxLength(1000)]
         public string? Notes { get; set; }
 
+        [Required]
+        public PlanningGenerationStatus PlanningStatus { get; set; } = PlanningGenerationStatus.Pending;
+
+        public DateTime? PlanningRequestedAtUtc { get; set; }
+        public DateTime? PlanningStartedAtUtc { get; set; }
+        public DateTime? PlanningCompletedAtUtc { get; set; }
+        public DateTime? NextPlanningAttemptAtUtc { get; set; }
+        public int PlanningAttemptCount { get; set; }
+        public int GeneratedTaskCount { get; set; }
+
+        [MaxLength(500)]
+        public string? PlanningFailureMessage { get; set; }
+
         // Navigation
         public Farm Farm { get; set; } = null!;
         public Crop Crop { get; set; } = null!;

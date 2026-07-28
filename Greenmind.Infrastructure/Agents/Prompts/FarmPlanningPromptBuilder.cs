@@ -25,6 +25,11 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                 - get_previous_week_tasks / get_completed_tasks: check what was planned vs. actually done last week,
                   to catch anything delayed, skipped, or overdue that needs rescheduling
 
+                The request also contains authoritative preloaded context: the full export plan and farm details,
+                available task types, soil history, live weather forecast, same-farm/same-crop historical tasks,
+                and the farm's existing schedule. You MUST use every populated context section. Missing sections are
+                explicitly empty and must not be invented.
+
                 EU export compliance rules you MUST follow (this crop's pre-harvest interval is {{cropPhi}} days):
                 {{EuComplianceRules.GeneralGuidelines}}
 

@@ -60,6 +60,39 @@ public sealed class ExportPlansController(IExportPlanService exportPlanService) 
             : NotFound();
     }
 
+    [HttpGet("{exportPlanId:int}/planning-status")]
+    public async Task<ActionResult<PlanningStatusDto>> GetPlanningStatus(
+        int exportPlanId,
+        CancellationToken cancellationToken)
+    {
+        var result = await exportPlanService.GetPlanningStatusAsync(
+            exportPlanId,
+            GetOwnerUserId(),
+            cancellationToken);
+
+        return result.Status == ExportPlanResultStatus.Succeeded
+            ? Ok(result.Value)
+            : NotFound();
+    }
+
+    [HttpPost("{exportPlanId:int}/planning/retry")]
+    public async Task<ActionResult<PlanningStatusDto>> RetryPlanning(
+        int exportPlanId,
+        CancellationToken cancellationToken)
+    {
+        var result = await exportPlanService.RetryPlanningAsync(
+            exportPlanId,
+            GetOwnerUserId(),
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ExportPlanResultStatus.Succeeded => Accepted(result.Value),
+            ExportPlanResultStatus.InvalidReference => Conflict(result.ErrorMessage),
+            _ => NotFound()
+        };
+    }
+
     private string GetOwnerUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new InvalidOperationException("An authenticated user id is required.");

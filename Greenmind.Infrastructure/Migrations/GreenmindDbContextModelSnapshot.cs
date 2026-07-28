@@ -331,8 +331,34 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<int>("GeneratedTaskCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("NextPlanningAttemptAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateOnly>("PlantingDate")
                         .HasColumnType("date");
+
+                    b.Property<int>("PlanningAttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PlanningCompletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PlanningFailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("PlanningRequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PlanningStartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PlanningStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -429,7 +455,8 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExportPlanId");
+                    b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
+                        .IsUnique();
 
                     b.HasIndex("TaskTypeId");
 

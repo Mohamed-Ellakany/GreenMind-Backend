@@ -1,5 +1,6 @@
 using Greenmind.Api.Logging;
 using Greenmind.Application.Contracts.Api;
+using System.Text.Json;
 
 namespace Greenmind.Api.Middleware;
 
@@ -33,8 +34,11 @@ public sealed class GlobalExceptionHandlingMiddleware(RequestDelegate next, ILog
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";
 
-            await context.Response.WriteAsJsonAsync(
-                ApiResponseFactory.FromException<object?>(exception, traceId));
+            await JsonSerializer.SerializeAsync(
+                context.Response.Body,
+                ApiResponseFactory.FromException<object?>(exception, traceId),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web),
+                context.RequestAborted);
         }
     }
 }

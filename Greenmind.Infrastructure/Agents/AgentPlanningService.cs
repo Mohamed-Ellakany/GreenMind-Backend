@@ -12,16 +12,13 @@ namespace Greenmind.Infrastructure.Agents
     public class AgentPlanningService : IAgentPlanningService
     {
         private readonly Kernel _kernel;
-        private readonly IFarmTaskPersistenceService _persistence;
         private readonly FarmPlanningPromptBuilder _promptBuilder;
 
         public AgentPlanningService(
             Kernel kernel,
-            FarmPlanningPromptBuilder promptBuilder,
-            IFarmTaskPersistenceService persistence)
+            FarmPlanningPromptBuilder promptBuilder)
         {
             _kernel = kernel;
-            _persistence = persistence;
             _promptBuilder = promptBuilder;
         }
 
@@ -57,8 +54,6 @@ namespace Greenmind.Infrastructure.Agents
                 .Where(t => t.PlannedDate >= request.PlanningWindow.StartDate
                          && t.PlannedDate <= request.PlanningWindow.EndDate)
                 .ToList();
-
-            await _persistence.SaveGeneratedTasksAsync(request.ExportPlan.ExportPlanId, response);
 
             return response;
         }

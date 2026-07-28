@@ -44,7 +44,7 @@ public sealed class ExportPlanCreateRequest : IValidatableObject
     [Required]
     public DateOnly? ExpectedExportDate { get; init; }
 
-    [Required]
+    // Retained for backward compatibility. New plans always start in Planning.
     public ExportPlanStatus? Status { get; init; }
 
     [MaxLength(1000)]
@@ -78,7 +78,9 @@ public sealed record ExportPlanListItemDto(
     DateOnly PlantingDate,
     DateOnly ExpectedHarvestDate,
     DateOnly ExpectedExportDate,
-    string Status);
+    string Status,
+    string PlanningStatus,
+    int GeneratedTaskCount);
 
 public sealed record ExportPlanDetailsDto(
     int Id,
@@ -96,7 +98,20 @@ public sealed record ExportPlanDetailsDto(
     DateOnly ExpectedHarvestDate,
     DateOnly ExpectedExportDate,
     string Status,
-    string? Notes);
+    string? Notes,
+    string PlanningStatus,
+    int GeneratedTaskCount,
+    string? PlanningFailureMessage);
+
+public sealed record PlanningStatusDto(
+    int ExportPlanId,
+    string Status,
+    int AttemptCount,
+    int GeneratedTaskCount,
+    DateTime? RequestedAtUtc,
+    DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc,
+    string? FailureMessage);
 
 public sealed record ExportPlanResult<T>(
     ExportPlanResultStatus Status,

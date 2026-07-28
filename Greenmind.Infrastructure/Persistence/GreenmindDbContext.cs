@@ -153,6 +153,14 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
             .Property(p => p.Status)
             .HasConversion<string>();
 
+        modelBuilder.Entity<ExportPlan>()
+            .Property(p => p.PlanningStatus)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<FarmTask>()
+            .HasIndex(t => new { t.ExportPlanId, t.TaskTypeId, t.PlannedDate })
+            .IsUnique();
+
 
         modelBuilder.Entity<FarmTask>()
             .Property(t => t.Status)
