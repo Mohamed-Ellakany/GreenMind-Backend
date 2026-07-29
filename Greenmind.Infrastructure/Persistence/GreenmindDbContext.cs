@@ -9,6 +9,8 @@ namespace Greenmind.Infrastructure.Persistence;
 public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     : IdentityDbContext<ApplicationUser>(options)   
 {
+
+    public DbSet<ComplianceDocument> ComplianceDocuments => Set<ComplianceDocument>();
     public DbSet<Farm> Farms => Set<Farm>();
     public DbSet<Crop> Crops => Set<Crop>();
     public DbSet<Destination> Destinations => Set<Destination>();
@@ -170,5 +172,21 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
         modelBuilder.Entity<FarmTask>()
             .Property(t => t.Priority)
             .HasConversion<string>();
+
+
+
+        modelBuilder.Entity<ComplianceDocument>(entity =>
+        {
+            // Store enum as string for readability in the DB (consistent with your other enums)
+            entity.Property(d => d.Category).HasConversion<string>();
+
+            // Index the columns the repository actually filters on, since SearchAsync
+            // pre-filters by Category/Crop/Destination before doing vector math in memory.
+            entity.HasIndex(d => new { d.Category, d.Crop, d.Destination });
+
+            // Embedding JSON can get long (1536 floats ≈ 20-30KB as text) - use unbounded/max length.
+            entity.Property(d => d.Embedding).HasColumnType("nvarchar(max)");
+            entity.Property(d => d.Content).HasColumnType("nvarchar(max)");
+        });
     }
 }

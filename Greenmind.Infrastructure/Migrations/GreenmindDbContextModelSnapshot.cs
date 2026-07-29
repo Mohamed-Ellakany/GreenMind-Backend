@@ -95,6 +95,53 @@ namespace Greenmind.Infrastructure.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.ComplianceDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Crop")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SectionReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SourceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category", "Crop", "Destination");
+
+                    b.ToTable("ComplianceDocuments");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.Crop", b =>
                 {
                     b.Property<int>("Id")
@@ -125,7 +172,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Crops", (string)null);
+                    b.ToTable("Crops");
 
                     b.HasData(
                         new
@@ -208,7 +255,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Destinations", (string)null);
+                    b.ToTable("Destinations");
 
                     b.HasData(
                         new
@@ -311,6 +358,9 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<int>("FarmId")
                         .HasColumnType("int");
 
+                    b.Property<int>("GeneratedTaskCount")
+                        .HasColumnType("int");
+
                     b.Property<string>("Governorate")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -327,18 +377,12 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<int>("GeneratedTaskCount")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("NextPlanningAttemptAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateOnly>("PlantingDate")
-                        .HasColumnType("date");
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int>("PlanningAttemptCount")
                         .HasColumnType("int");
@@ -360,6 +404,9 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateOnly>("PlantingDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -372,7 +419,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("ExportPlans", (string)null);
+                    b.ToTable("ExportPlans");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Farm", b =>
@@ -406,7 +453,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("OwnerUserId")
                         .IsUnique();
 
-                    b.ToTable("Farms", (string)null);
+                    b.ToTable("Farms");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
@@ -455,12 +502,12 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TaskTypeId");
+
                     b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
                         .IsUnique();
 
-                    b.HasIndex("TaskTypeId");
-
-                    b.ToTable("FarmTasks", (string)null);
+                    b.ToTable("FarmTasks");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.SoilMeasurement", b =>
@@ -506,7 +553,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("ExportPlanId");
 
-                    b.ToTable("SoilMeasurements", (string)null);
+                    b.ToTable("SoilMeasurements");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskType", b =>
@@ -531,7 +578,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TaskTypes", (string)null);
+                    b.ToTable("TaskTypes");
 
                     b.HasData(
                         new
