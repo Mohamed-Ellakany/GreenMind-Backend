@@ -7,12 +7,14 @@ using Greenmind.Domain.Consts.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Greenmind.Api.Controllers.FarmOwner;
 
 [ApiController]
 [Route("api/farm/chat/sessions")]
 [Authorize(Roles = RoleNames.FarmOwner)]
+[EnableRateLimiting("ai-chat")]
 public sealed class FarmChatController(
     IChatService chatService,
     IOptions<JsonOptions> jsonOptions) : ControllerBase

@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IConversationAiService, ConversationAiService>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<ITaskChangeProposalService, TaskChangeProposalService>();
+        services.AddSingleton<IPlanTaskProposalGenerator, PlanTaskProposalGenerator>();
         services.AddScoped<ICostManagementService, CostManagementService>();
         services.AddScoped<IExpenseAttachmentService, ExpenseAttachmentService>();
         services.AddSingleton<IPrivateFileStorage, ServerPrivateFileStorage>();

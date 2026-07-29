@@ -51,6 +51,8 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
                 options.RootPath = PrivateStorageRoot);
             services.RemoveAll<IConversationAiService>();
             services.AddSingleton<IConversationAiService, StubConversationAiService>();
+            services.RemoveAll<IPlanTaskProposalGenerator>();
+            services.AddSingleton<IPlanTaskProposalGenerator, StubPlanTaskProposalGenerator>();
             services.RemoveAll<IDiseaseVisionAnalyzer>();
             services.AddSingleton<IDiseaseVisionAnalyzer, StubDiseaseVisionAnalyzer>();
 
@@ -143,6 +145,15 @@ internal sealed class StubDiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
             "النتيجة استشارية وليست تشخيصًا معمليًا.",
             "integration-vision",
             "test-v1"));
+}
+
+internal sealed class StubPlanTaskProposalGenerator : IPlanTaskProposalGenerator
+{
+    public Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
+        string userRequest,
+        string planContextJson,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<GeneratedTaskChangeItem>>([]);
 }
 
 internal sealed class StubConversationAiService : IConversationAiService

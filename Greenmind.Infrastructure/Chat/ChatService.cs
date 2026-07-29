@@ -3,6 +3,7 @@ using System.Text.Json;
 using Greenmind.Application.Contracts.Chat;
 using Greenmind.Application.Dtos.Chat;
 using Greenmind.Application.Interfaces.AI;
+using Greenmind.Application.Contracts.TaskProposals;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
@@ -13,6 +14,8 @@ namespace Greenmind.Infrastructure.Chat;
 public sealed class ChatService(
     GreenmindDbContext dbContext,
     IConversationAiService conversationAiService,
+    IPlanTaskProposalGenerator proposalGenerator,
+    ITaskChangeProposalService proposalService,
     TimeProvider timeProvider) : IChatService
 {
     private static readonly JsonSerializerOptions ContextJsonOptions =
@@ -239,6 +242,7 @@ public sealed class ChatService(
             .Where(message =>
                 message.ChatSessionId == session.Id &&
                 message.Id < userMessage.Id &&
+                message.Id > (session.SummaryThroughMessageId ?? 0) &&
                 message.Status == ChatMessageStatus.Completed)
             .OrderByDescending(message => message.Id)
             .Take(20)
@@ -331,13 +335,50 @@ public sealed class ChatService(
             }
         }
 
+        int? taskChangeProposalId = null;
+        if (failure is null &&
+            aiRequest.Scope == ChatScope.ExportPlan &&
+            session.ExportPlanId.HasValue)
+        {
+            try
+            {
+                var generatedItems = await proposalGenerator.TryGenerateAsync(
+                    aiRequest.UserMessage,
+                    aiRequest.ContextJson,
+                    CancellationToken.None);
+                var proposalResult = await proposalService.CreateFromAiAsync(
+                    session.ExportPlanId.Value,
+                    assistantMessage!.Id,
+                    generatedItems,
+                    CancellationToken.None);
+                taskChangeProposalId = proposalResult.Value?.Id;
+            }
+            catch
+            {
+                // Proposal generation is optional; a safe chat answer remains valid.
+            }
+        }
+
+        if (failure is null)
+        {
+            try
+            {
+                await UpdateConversationSummaryAsync(session, CancellationToken.None);
+            }
+            catch
+            {
+                // Summarization is an optimization and must never invalidate a reply.
+            }
+        }
+
         if (failure is null)
         {
             yield return new ChatStreamEventDto(
                 "completed",
                 ChatMessageStatus.Completed,
                 MessageId: assistantMessage!.Id,
-                Content: assistantMessage.Content);
+                Content: assistantMessage.Content,
+                TaskChangeProposalId: taskChangeProposalId);
             yield break;
         }
 
@@ -370,6 +411,52 @@ public sealed class ChatService(
         session.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         await dbContext.SaveChangesAsync(CancellationToken.None);
         return failedMessage;
+    }
+
+    private async Task UpdateConversationSummaryAsync(
+        ChatSession session,
+        CancellationToken cancellationToken)
+    {
+        const int retainRecentMessages = 12;
+        const int summarizeAtMessageCount = 20;
+        const int maximumSummaryLength = 6000;
+
+        var unsummarized = await dbContext.ChatMessages
+            .AsNoTracking()
+            .Where(message =>
+                message.ChatSessionId == session.Id &&
+                message.Id > (session.SummaryThroughMessageId ?? 0) &&
+                message.Status == ChatMessageStatus.Completed)
+            .OrderBy(message => message.Id)
+            .Select(message => new { message.Id, message.Role, message.Content })
+            .ToListAsync(cancellationToken);
+
+        if (unsummarized.Count < summarizeAtMessageCount)
+            return;
+
+        var summarizedMessages = unsummarized
+            .Take(unsummarized.Count - retainRecentMessages)
+            .ToList();
+        if (summarizedMessages.Count == 0)
+            return;
+
+        var summaryBuilder = new System.Text.StringBuilder();
+        if (!string.IsNullOrWhiteSpace(session.Summary))
+            summaryBuilder.AppendLine(session.Summary.Trim());
+        summaryBuilder.AppendLine("سجل المحادثة السابق:");
+        foreach (var message in summarizedMessages)
+        {
+            summaryBuilder
+                .Append(message.Role == ChatMessageRole.User ? "المستخدم: " : "المساعد: ")
+                .AppendLine(message.Content.Trim());
+        }
+
+        var summary = summaryBuilder.ToString().Trim();
+        session.Summary = summary.Length <= maximumSummaryLength
+            ? summary
+            : summary[^maximumSummaryLength..];
+        session.SummaryThroughMessageId = summarizedMessages[^1].Id;
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<bool> IsOwnedSessionAsync(

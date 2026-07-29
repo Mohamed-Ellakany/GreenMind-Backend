@@ -7,12 +7,14 @@ using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Greenmind.Api.Controllers.FarmOwner;
 
 [ApiController]
 [Route("api/export-plans/{exportPlanId:int}/expenses/{expenseId:int}/attachments")]
 [Authorize(Roles = RoleNames.FarmOwner)]
+[EnableRateLimiting("private-files")]
 public sealed class ExpenseAttachmentsController(
     IExpenseAttachmentService attachmentService) : ControllerBase
 {

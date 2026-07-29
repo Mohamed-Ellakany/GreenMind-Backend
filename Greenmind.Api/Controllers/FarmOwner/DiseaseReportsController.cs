@@ -6,12 +6,14 @@ using Greenmind.Application.Dtos.Disease;
 using Greenmind.Domain.Consts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Greenmind.Api.Controllers.FarmOwner;
 
 [ApiController]
 [Route("api/export-plans/{exportPlanId:int}/disease-reports")]
 [Authorize(Roles = RoleNames.FarmOwner)]
+[EnableRateLimiting("ai-analysis")]
 public sealed class DiseaseReportsController(
     IDiseaseReportService diseaseService) : ControllerBase
 {

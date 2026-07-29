@@ -2,6 +2,7 @@ using System.Text.Json;
 using Greenmind.Application.Contracts.Api;
 using Greenmind.Application.Contracts.TaskProposals;
 using Greenmind.Application.Dtos.TaskProposals;
+using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
@@ -18,6 +19,131 @@ public sealed class TaskChangeProposalService(
         {
             PropertyNameCaseInsensitive = true
         };
+
+    public async Task<TaskProposalResult<TaskChangeProposalDto?>> CreateFromAiAsync(
+        int exportPlanId,
+        int sourceChatMessageId,
+        IReadOnlyList<GeneratedTaskChangeItem> generatedItems,
+        CancellationToken cancellationToken = default)
+    {
+        if (generatedItems.Count == 0)
+            return TaskProposalResult<TaskChangeProposalDto?>.Success(null);
+
+        var plan = await dbContext.ExportPlans
+            .SingleOrDefaultAsync(item => item.Id == exportPlanId, cancellationToken);
+        var sourceExists = await dbContext.ChatMessages.AnyAsync(message =>
+            message.Id == sourceChatMessageId &&
+            message.Role == ChatMessageRole.Assistant &&
+            message.ChatSession.ExportPlanId == exportPlanId,
+            cancellationToken);
+        if (plan is null || !sourceExists)
+            return TaskProposalResult<TaskChangeProposalDto?>.NotFound();
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var today = DateOnly.FromDateTime(now);
+        var tasks = await dbContext.FarmTasks
+            .Where(task => task.ExportPlanId == exportPlanId)
+            .ToDictionaryAsync(task => task.Id, cancellationToken);
+        var taskTypeIds = await dbContext.TaskTypes
+            .AsNoTracking()
+            .Select(type => type.Id)
+            .ToHashSetAsync(cancellationToken);
+
+        var parsed = new List<(TaskChangeOperation Operation, GeneratedTaskChangeItem Item, FarmTask? Task)>();
+        foreach (var item in generatedItems)
+        {
+            var operation = item.Operation.Trim().ToLowerInvariant() switch
+            {
+                "add" => TaskChangeOperation.Add,
+                "modify" => TaskChangeOperation.Modify,
+                "cancel" => TaskChangeOperation.Cancel,
+                _ => (TaskChangeOperation?)null
+            };
+            FarmTask? task = null;
+            if (!operation.HasValue ||
+                string.IsNullOrWhiteSpace(item.Reason) ||
+                item.Reason.Length > 1000 ||
+                !taskTypeIds.Contains(item.ProposedValues.TaskTypeId) ||
+                string.IsNullOrWhiteSpace(item.ProposedValues.Title) ||
+                item.ProposedValues.Title.Length > 200 ||
+                item.ProposedValues.Description?.Length > 1000 ||
+                item.ProposedValues.PlannedDate <= today ||
+                item.ProposedValues.PlannedDate > plan.ExpectedExportDate)
+            {
+                return TaskProposalResult<TaskChangeProposalDto?>.Invalid(
+                    ApiErrorCodes.TaskNotEligible,
+                    "تعذر إنشاء اقتراح آمن من الطلب الحالي.");
+            }
+
+            if (operation == TaskChangeOperation.Add)
+            {
+                if (item.FarmTaskId.HasValue)
+                    return InvalidGeneratedProposal();
+            }
+            else if (!item.FarmTaskId.HasValue ||
+                     !tasks.TryGetValue(item.FarmTaskId.Value, out task) ||
+                     task.Status != Greenmind.Domain.Consts.Enums.TaskStatus.Pending ||
+                     task.PlannedDate <= today)
+            {
+                return InvalidGeneratedProposal();
+            }
+            parsed.Add((operation.Value, item, task));
+        }
+
+        var modifiedTaskIds = parsed
+            .Where(item => item.Operation == TaskChangeOperation.Modify)
+            .Select(item => item.Task!.Id)
+            .ToHashSet();
+        var resultingSlots = tasks.Values
+            .Where(task => !modifiedTaskIds.Contains(task.Id))
+            .Select(task => (task.TaskTypeId, task.PlannedDate))
+            .ToHashSet();
+        foreach (var item in parsed.Where(item => item.Operation != TaskChangeOperation.Cancel))
+        {
+            if (!resultingSlots.Add((
+                    item.Item.ProposedValues.TaskTypeId,
+                    item.Item.ProposedValues.PlannedDate)))
+            {
+                return InvalidGeneratedProposal();
+            }
+        }
+
+        var proposal = new TaskChangeProposal
+        {
+            ExportPlanId = exportPlanId,
+            SourceChatMessageId = sourceChatMessageId,
+            ExpiresAtUtc = now.AddHours(24)
+        };
+        foreach (var generated in parsed)
+        {
+            var original = generated.Task is null
+                ? null
+                : new TaskOriginalValuesDto(
+                    generated.Task.Id,
+                    generated.Task.TaskTypeId,
+                    generated.Task.Title,
+                    generated.Task.Description,
+                    generated.Task.PlannedDate,
+                    generated.Task.Status,
+                    generated.Task.Priority);
+            proposal.Items.Add(new TaskChangeProposalItem
+            {
+                Operation = generated.Operation,
+                FarmTaskId = generated.Task?.Id,
+                OriginalValuesJson = original is null
+                    ? null
+                    : JsonSerializer.Serialize(original, JsonOptions),
+                ProposedValuesJson = JsonSerializer.Serialize(
+                    generated.Item.ProposedValues,
+                    JsonOptions),
+                Reason = generated.Item.Reason.Trim()
+            });
+        }
+
+        dbContext.TaskChangeProposals.Add(proposal);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TaskProposalResult<TaskChangeProposalDto?>.Success(Map(proposal));
+    }
 
     public async Task<TaskProposalResult<TaskChangeProposalDto>> GetAsync(
         int proposalId,
@@ -261,6 +387,11 @@ public sealed class TaskChangeProposalService(
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static TaskProposalResult<TaskChangeProposalDto?> InvalidGeneratedProposal() =>
+        TaskProposalResult<TaskChangeProposalDto?>.Invalid(
+            ApiErrorCodes.TaskNotEligible,
+            "تعذر إنشاء اقتراح آمن من الطلب الحالي.");
 
     private sealed record ValidatedOperation(
         TaskChangeOperation Operation,

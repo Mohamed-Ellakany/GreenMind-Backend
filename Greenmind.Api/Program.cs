@@ -14,6 +14,8 @@ using System.Text;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
 using Greenmind.Infrastructure.Storage;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -135,6 +137,47 @@ namespace Greenmind.Api
             // Simple role-based authorization
             builder.Services.AddAuthorization();
 
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy("ai-chat", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+                options.AddPolicy("ai-analysis", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 20,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+                options.AddPolicy("private-files", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 120,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+            });
+
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
             builder.Services.AddSwaggerGen(options =>
@@ -186,6 +229,8 @@ namespace Greenmind.Api
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
             app.UseAuthorization();
+
+            app.UseRateLimiter();
 
 
             app.MapControllers();

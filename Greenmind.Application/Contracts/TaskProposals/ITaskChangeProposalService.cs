@@ -1,9 +1,16 @@
 using Greenmind.Application.Dtos.TaskProposals;
+using Greenmind.Application.Interfaces.AI;
 
 namespace Greenmind.Application.Contracts.TaskProposals;
 
 public interface ITaskChangeProposalService
 {
+    Task<TaskProposalResult<TaskChangeProposalDto?>> CreateFromAiAsync(
+        int exportPlanId,
+        int sourceChatMessageId,
+        IReadOnlyList<GeneratedTaskChangeItem> generatedItems,
+        CancellationToken cancellationToken = default);
+
     Task<TaskProposalResult<TaskChangeProposalDto>> GetAsync(
         int proposalId,
         string ownerUserId,

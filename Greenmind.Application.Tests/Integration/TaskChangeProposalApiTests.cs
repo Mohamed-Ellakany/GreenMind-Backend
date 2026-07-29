@@ -4,7 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Greenmind.Api.Json;
 using Greenmind.Application.Contracts.Api;
+using Greenmind.Application.Contracts.TaskProposals;
 using Greenmind.Application.Dtos.TaskProposals;
+using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
@@ -21,6 +23,85 @@ public sealed class TaskChangeProposalApiTests(GreenmindApiFactory factory)
     private static readonly JsonSerializerOptions ApiJsonOptions = CreateApiJsonOptions();
     private static readonly JsonSerializerOptions SnapshotJsonOptions =
         new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task CreateFromAi_CreatesReviewableProposal_WithoutMutatingTasks()
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+        var proposalService = scope.ServiceProvider
+            .GetRequiredService<ITaskChangeProposalService>();
+        var farmId = await dbContext.Farms
+            .Where(farm => farm.OwnerUserId == GreenmindApiFactory.FarmOwnerUserId)
+            .Select(farm => farm.Id)
+            .SingleAsync();
+        var taskTypeId = await dbContext.TaskTypes
+            .OrderBy(type => type.Id)
+            .Select(type => type.Id)
+            .FirstAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var plan = new ExportPlan
+        {
+            FarmId = farmId,
+            CropId = 1,
+            DestinationId = 1,
+            Name = $"AI proposal plan {suffix}",
+            Governorate = "القاهرة",
+            City = "القاهرة",
+            AreaInFeddan = 4,
+            PlantingDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-20)),
+            ExpectedHarvestDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            ExpectedExportDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(45)),
+            Status = ExportPlanStatus.Planning
+        };
+        var session = new ChatSession
+        {
+            FarmId = farmId,
+            ExportPlan = plan,
+            Scope = ChatScope.ExportPlan,
+            Title = "AI proposal test"
+        };
+        var assistantMessage = new ChatMessage
+        {
+            ChatSession = session,
+            Role = ChatMessageRole.Assistant,
+            Content = "سأقترح مهمة جديدة لمراجعتك.",
+            Status = ChatMessageStatus.Completed
+        };
+        dbContext.AddRange(plan, session, assistantMessage);
+        await dbContext.SaveChangesAsync();
+        var tasksBefore = await dbContext.FarmTasks.CountAsync(task =>
+            task.ExportPlanId == plan.Id);
+
+        var result = await proposalService.CreateFromAiAsync(
+            plan.Id,
+            assistantMessage.Id,
+            [
+                new GeneratedTaskChangeItem(
+                    "add",
+                    null,
+                    new ProposedTaskValuesDto(
+                        taskTypeId,
+                        "فحص جاهزية المحصول",
+                        "مراجعة حالة المحصول قبل التجهيز.",
+                        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)),
+                        TaskPriority.High),
+                    "طلب المستخدم إضافة فحص قبل التجهيز")
+            ]);
+
+        Assert.Equal(TaskProposalResultStatus.Succeeded, result.Status);
+        Assert.NotNull(result.Value);
+        Assert.Equal(TaskChangeProposalStatus.PendingReview, result.Value!.Status);
+        Assert.Equal(assistantMessage.Id, result.Value.SourceChatMessageId);
+        Assert.Equal(TaskChangeOperation.Add, Assert.Single(result.Value.Items).Operation);
+        Assert.Equal(tasksBefore, await dbContext.FarmTasks.CountAsync(task =>
+            task.ExportPlanId == plan.Id));
+
+        var ownerClient = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var response = await ownerClient.GetAsync(
+            $"/api/task-change-proposals/{result.Value.Id}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
 
     [Fact]
     public async Task Apply_ModifiesEligibleTask_AndIsTenantIsolated()
