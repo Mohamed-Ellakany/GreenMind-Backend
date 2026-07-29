@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
+using Greenmind.Infrastructure.Storage;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -37,6 +38,14 @@ namespace Greenmind.Api
 
 
             // Add services to the container.
+
+            // Files under this root are private application data. The app intentionally
+            // does not enable static-file middleware; authorized controllers stream them.
+            builder.Services.Configure<PrivateFileStorageOptions>(options =>
+                options.RootPath = Path.Combine(
+                    builder.Environment.ContentRootPath,
+                    "wwwroot",
+                    "private"));
 
             builder.Services.AddControllers(options =>
             {
@@ -138,6 +147,11 @@ namespace Greenmind.Api
             {
                 builder.Services.AddHostedService<Greenmind.Api.HostedServices.InitialExportPlanPlanningService>();
                 builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+            }
+
+            if (!builder.Environment.IsEnvironment("Testing"))
+            {
+                builder.Services.AddHostedService<Greenmind.Api.HostedServices.DiseaseAnalysisBackgroundService>();
             }
 
             var app = builder.Build();

@@ -24,6 +24,10 @@ using Greenmind.Application.Contracts.TaskProposals;
 using Greenmind.Infrastructure.TaskProposals;
 using Greenmind.Application.Contracts.Costs;
 using Greenmind.Infrastructure.Costs;
+using Greenmind.Application.Contracts.Storage;
+using Greenmind.Infrastructure.Storage;
+using Greenmind.Application.Contracts.Disease;
+using Greenmind.Infrastructure.Disease;
 
 namespace Greenmind.Infrastructure;
 
@@ -58,6 +62,10 @@ public static class DependencyInjection
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<ITaskChangeProposalService, TaskChangeProposalService>();
         services.AddScoped<ICostManagementService, CostManagementService>();
+        services.AddScoped<IExpenseAttachmentService, ExpenseAttachmentService>();
+        services.AddSingleton<IPrivateFileStorage, ServerPrivateFileStorage>();
+        services.AddScoped<IDiseaseReportService, DiseaseReportService>();
+        services.AddSingleton<IDiseaseVisionAnalyzer, DiseaseVisionAnalyzer>();
 
         return services;
     }

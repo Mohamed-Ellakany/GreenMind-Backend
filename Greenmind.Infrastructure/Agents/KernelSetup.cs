@@ -52,9 +52,10 @@ public static class KernelSetup
         // Microsoft.Extensions.AI.OpenAI package - no SKEXP pragma needed here.
         services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ =>
         {
+            var endpoint = new Uri(config["OpenAI:Endpoint"] ?? "https://models.github.ai/inference");
             var openAiClient = new OpenAIClient(
                 new ApiKeyCredential(config["OpenAI:ApiKey"]!),
-                new OpenAIClientOptions { Endpoint = new Uri("https://models.github.ai/inference") });
+                new OpenAIClientOptions { Endpoint = endpoint });
 
             var embeddingClient = openAiClient.GetEmbeddingClient(
                 config["Embeddings:Model"] ?? "openai/text-embedding-3-small");
@@ -82,7 +83,7 @@ public static class KernelSetup
             builder.AddOpenAIChatCompletion(
                 modelId: config["OpenAI:Model"] ?? "openai/gpt-4.1-mini",
                 apiKey: config["OpenAI:ApiKey"]!,
-                 endpoint: new Uri("https://models.github.ai/inference"));
+                endpoint: new Uri(config["OpenAI:Endpoint"] ?? "https://models.github.ai/inference"));
 
             builder.Plugins.AddFromObject(sp.GetRequiredService<WeatherPlugin>(), "Weather");
             builder.Plugins.AddFromObject(sp.GetRequiredService<SoilPlugin>(), "Soil");
