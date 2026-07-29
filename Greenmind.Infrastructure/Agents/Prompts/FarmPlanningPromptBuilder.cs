@@ -24,6 +24,9 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                   status and trend, and analyze it yourself to decide on fertilization/irrigation adjustments
                 - get_previous_week_tasks / get_completed_tasks: check what was planned vs. actually done last week,
                   to catch anything delayed, skipped, or overdue that needs rescheduling
+                - find_active_substance / find_product_mrl: before recommending any pesticide or active substance,
+                  check the administrator-uploaded regulatory data for the plan's destination region and crop. If no
+                  matching data exists, state that verification is required instead of inventing an approval or MRL.
 
                 The request also contains authoritative preloaded context: the full export plan and farm details,
                 available task types, soil history, live weather forecast, same-farm/same-crop historical tasks,

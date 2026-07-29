@@ -22,6 +22,76 @@ namespace Greenmind.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.ActiveSubstance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly?>("ApprovalExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<byte>("ApprovalStatus")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("CasNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExternalId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Functions")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Legislation")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RegionName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("RegulationReference")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Remark")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegionName", "CasNumber");
+
+                    b.HasIndex("RegionName", "ExternalId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RegionName", "Name");
+
+                    b.ToTable("ActiveSubstances", (string)null);
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -106,6 +176,9 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -115,6 +188,11 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -123,7 +201,8 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("Crops");
 
@@ -134,6 +213,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Fresh strawberry crop for export planning",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Strawberry"
                         },
                         new
@@ -142,6 +222,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Table grapes crop for export planning",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Grapes"
                         },
                         new
@@ -150,6 +231,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Citrus crop for export planning",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Citrus"
                         },
                         new
@@ -158,6 +240,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Potato crop for export planning",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Potato"
                         },
                         new
@@ -166,6 +249,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Onion crop for export planning",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Onion"
                         },
                         new
@@ -174,6 +258,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Green beans crop for export planning",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Green Beans"
                         });
                 });
@@ -189,6 +274,9 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -198,6 +286,11 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -206,7 +299,8 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("Destinations");
 
@@ -217,6 +311,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Germany"
                         },
                         new
@@ -225,6 +320,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Netherlands"
                         },
                         new
@@ -233,6 +329,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "France"
                         },
                         new
@@ -241,6 +338,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Italy"
                         },
                         new
@@ -249,6 +347,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Spain"
                         },
                         new
@@ -257,6 +356,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "EU destination market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Belgium"
                         },
                         new
@@ -265,6 +365,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "European Union export market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "European Union"
                         },
                         new
@@ -273,6 +374,7 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Saudi Arabian export market",
                             IsActive = true,
+                            IsDeleted = false,
                             Name = "Saudi Arabia"
                         });
                 });
@@ -311,6 +413,9 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<int>("FarmId")
                         .HasColumnType("int");
 
+                    b.Property<int>("GeneratedTaskCount")
+                        .HasColumnType("int");
+
                     b.Property<string>("Governorate")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -327,18 +432,12 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<int>("GeneratedTaskCount")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("NextPlanningAttemptAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateOnly>("PlantingDate")
-                        .HasColumnType("date");
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int>("PlanningAttemptCount")
                         .HasColumnType("int");
@@ -359,6 +458,9 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<string>("PlanningStatus")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateOnly>("PlantingDate")
+                        .HasColumnType("date");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -455,12 +557,71 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TaskTypeId");
+
                     b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
                         .IsUnique();
 
-                    b.HasIndex("TaskTypeId");
-
                     b.ToTable("FarmTasks");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ProductMrl", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ExternalPesticideId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDetectionLimit")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MaximumResidueLevel")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<string>("ProductType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("RegionName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ResidueName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegionName", "ProductType");
+
+                    b.HasIndex("RegionName", "ProductType", "ExternalPesticideId");
+
+                    b.ToTable("ProductMrls", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.SoilMeasurement", b =>

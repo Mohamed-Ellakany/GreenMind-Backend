@@ -13,9 +13,10 @@ public sealed class AdminCropsController(IPlatformAdminService adminService) : C
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<MasterDataItemDto>>> GetAll(
+        [FromQuery] bool includeDeleted,
         CancellationToken cancellationToken)
     {
-        return Ok(await adminService.GetCropsAsync(cancellationToken));
+        return Ok(await adminService.GetCropsAsync(includeDeleted, cancellationToken));
     }
 
     [HttpPost]
@@ -48,6 +49,22 @@ public sealed class AdminCropsController(IPlatformAdminService adminService) : C
             id,
             request.IsActive!.Value,
             cancellationToken));
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<ActionResult<MasterDataItemDto>> Delete(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        return ToActionResult(await adminService.DeleteCropAsync(id, cancellationToken));
+    }
+
+    [HttpPost("{id:int}/restore")]
+    public async Task<ActionResult<MasterDataItemDto>> Restore(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        return ToActionResult(await adminService.RestoreCropAsync(id, cancellationToken));
     }
 
     private ActionResult<MasterDataItemDto> ToActionResult(AdminOperationResult<MasterDataItemDto> result) =>

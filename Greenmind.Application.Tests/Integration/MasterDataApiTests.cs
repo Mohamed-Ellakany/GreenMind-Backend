@@ -62,6 +62,71 @@ public sealed class MasterDataApiTests(GreenmindApiFactory factory)
         Assert.Contains(items, item => item.Id == created.Id && item.Name == updatedName && !item.IsActive);
     }
 
+    [Theory]
+    [InlineData("crops")]
+    [InlineData("destinations")]
+    public async Task Admin_CanSoftDeleteAndRestoreMasterData(string resource)
+    {
+        using var adminClient = CreateAuthenticatedClient(RoleNames.Admin);
+        var name = $"Deleted-{resource}-{Guid.NewGuid():N}";
+
+        var createResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/{resource}",
+            new MasterDataRequest(name, null));
+        var created = await ReadDataAsync<MasterDataItemDto>(createResponse);
+
+        var deleteResponse = await adminClient.DeleteAsync($"/api/admin/{resource}/{created.Id}");
+        var deleted = await ReadDataAsync<MasterDataItemDto>(deleteResponse);
+        Assert.True(deleted.IsDeleted);
+        Assert.NotNull(deleted.DeletedAtUtc);
+
+        var defaultListResponse = await adminClient.GetAsync($"/api/admin/{resource}");
+        var defaultItems = await ReadDataAsync<List<MasterDataItemDto>>(defaultListResponse);
+        Assert.DoesNotContain(defaultItems, item => item.Id == created.Id);
+
+        var deletedListResponse = await adminClient.GetAsync($"/api/admin/{resource}?includeDeleted=true");
+        var deletedItems = await ReadDataAsync<List<MasterDataItemDto>>(deletedListResponse);
+        Assert.Contains(deletedItems, item => item.Id == created.Id && item.IsDeleted);
+
+        using var ownerClient = CreateAuthenticatedClient(RoleNames.FarmOwner);
+        var ownerResponse = await ownerClient.GetAsync($"/api/farm-owner/{resource}");
+        var ownerItems = await ReadDataAsync<List<MasterDataItemDto>>(ownerResponse);
+        Assert.DoesNotContain(ownerItems, item => item.Id == created.Id);
+
+        var restoreResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/{resource}/{created.Id}/restore",
+            new { });
+        var restored = await ReadDataAsync<MasterDataItemDto>(restoreResponse);
+        Assert.False(restored.IsDeleted);
+        Assert.Null(restored.DeletedAtUtc);
+    }
+
+    [Theory]
+    [InlineData("crops")]
+    [InlineData("destinations")]
+    public async Task RestoreDeletedMasterData_FailsWhenNameNowConflicts(string resource)
+    {
+        using var adminClient = CreateAuthenticatedClient(RoleNames.Admin);
+        var name = $"Restore-conflict-{resource}-{Guid.NewGuid():N}";
+
+        var firstResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/{resource}",
+            new MasterDataRequest(name, null));
+        var first = await ReadDataAsync<MasterDataItemDto>(firstResponse);
+        await adminClient.DeleteAsync($"/api/admin/{resource}/{first.Id}");
+
+        var secondResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/{resource}",
+            new MasterDataRequest(name, null));
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+
+        var restoreResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/{resource}/{first.Id}/restore",
+            new { });
+
+        Assert.Equal(HttpStatusCode.Conflict, restoreResponse.StatusCode);
+    }
+
     [Fact]
     public async Task Admin_CanCreateUpdateListAndDeactivateDestination()
     {

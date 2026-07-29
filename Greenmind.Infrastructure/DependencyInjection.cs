@@ -14,6 +14,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Greenmind.Infrastructure.Services;
 using Greenmind.Application.Contracts.Planning;
 using Greenmind.Infrastructure.Planning;
+using Greenmind.Application.Contracts.Regulatory;
+using Greenmind.Infrastructure.Regulatory;
 
 namespace Greenmind.Infrastructure;
 
@@ -42,6 +44,8 @@ public static class DependencyInjection
         services.AddScoped<IExportPlanPlanningService, ExportPlanPlanningService>();
         services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IRegulatoryDataImportService, RegulatoryDataImportService>();
+        services.AddScoped<IRegulatoryKnowledgeQueryService, RegulatoryKnowledgeQueryService>();
 
         return services;
     }

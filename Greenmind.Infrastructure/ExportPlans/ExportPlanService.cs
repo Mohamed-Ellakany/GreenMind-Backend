@@ -28,7 +28,7 @@ public sealed class ExportPlanService(GreenmindDbContext dbContext) : IExportPla
         }
 
         if (!await dbContext.Crops.AnyAsync(
-                crop => crop.Id == cropId && crop.IsActive,
+                crop => crop.Id == cropId && crop.IsActive && !crop.IsDeleted,
                 cancellationToken))
         {
             return ExportPlanResult<ExportPlanDetailsDto>.InvalidReference(
@@ -37,7 +37,7 @@ public sealed class ExportPlanService(GreenmindDbContext dbContext) : IExportPla
         }
 
         if (!await dbContext.Destinations.AnyAsync(
-                destination => destination.Id == destinationId && destination.IsActive,
+                destination => destination.Id == destinationId && destination.IsActive && !destination.IsDeleted,
                 cancellationToken))
         {
             return ExportPlanResult<ExportPlanDetailsDto>.InvalidReference(

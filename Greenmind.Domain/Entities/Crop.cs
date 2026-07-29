@@ -16,6 +16,10 @@ namespace Greenmind.Domain.Entities
 
         public bool IsActive { get; set; } = true;
 
+        public bool IsDeleted { get; set; }
+
+        public DateTime? DeletedAtUtc { get; set; }
+
         public ICollection<ExportPlan> ExportPlans { get; set; } = new List<ExportPlan>();
 
     }

@@ -60,7 +60,7 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
             var res = await userManager.CreateAsync(user, "P@ssword123");
             await userManager.AddToRoleAsync(user, "FarmOwner");
 
-            var farm = new Farm { Name = "Active Farm", OwnerUserId = user.Id };
+            var farm = new Farm { Name = "Active Farm", OwnerUserId = user.Id, IsApproved = true };
             db.Farms.Add(farm);
             await db.SaveChangesAsync();
         }
@@ -88,7 +88,7 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task InactiveUser_CannotLogin()
+    public async Task PendingFarmOwner_WithValidPassword_GetsPendingApprovalCode()
     {
         var client = _factory.CreateClient();
 
@@ -96,14 +96,71 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
         {
             var services = scope.ServiceProvider;
             var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+            var db = services.GetRequiredService<GreenmindDbContext>();
+
+            var user = new ApplicationUser { UserName = "pending@test.local", Email = "pending@test.local", FullName = "Pending User", IsActive = false };
+            await userManager.CreateAsync(user, "P@ssword123");
+            db.Farms.Add(new Farm { Name = "Pending Farm", OwnerUserId = user.Id, IsApproved = false });
+            await db.SaveChangesAsync();
+        }
+
+        var login = new LoginRequest { Email = "pending@test.local", Password = "P@ssword123" };
+        var response = await client.PostAsJsonAsync("/api/auth/login", login);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(ApiErrorCodes.AccountPendingApproval, body?.Error?.Code);
+    }
+
+    [Fact]
+    public async Task InactiveApprovedUser_WithValidPassword_GetsInactiveCode()
+    {
+        var client = _factory.CreateClient();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+            var db = services.GetRequiredService<GreenmindDbContext>();
 
             var user = new ApplicationUser { UserName = "inactive@test.local", Email = "inactive@test.local", FullName = "Inactive User", IsActive = false };
             await userManager.CreateAsync(user, "P@ssword123");
+            db.Farms.Add(new Farm { Name = "Inactive Farm", OwnerUserId = user.Id, IsApproved = true });
+            await db.SaveChangesAsync();
         }
 
-        var login = new LoginRequest { Email = "inactive@test.local", Password = "P@ssword123" };
-        var response = await client.PostAsJsonAsync("/api/auth/login", login);
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest { Email = "inactive@test.local", Password = "P@ssword123" });
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(ApiErrorCodes.AccountInactive, body?.Error?.Code);
+    }
+
+    [Fact]
+    public async Task PendingFarmOwner_WithInvalidPassword_DoesNotRevealApprovalState()
+    {
+        var client = _factory.CreateClient();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+            var db = services.GetRequiredService<GreenmindDbContext>();
+
+            var user = new ApplicationUser { UserName = "pending-invalid@test.local", Email = "pending-invalid@test.local", FullName = "Pending Invalid User", IsActive = false };
+            await userManager.CreateAsync(user, "P@ssword123");
+            db.Farms.Add(new Farm { Name = "Pending Invalid Farm", OwnerUserId = user.Id, IsApproved = false });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest { Email = "pending-invalid@test.local", Password = "wrong-password" });
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(ApiErrorCodes.Unauthorized, body?.Error?.Code);
     }
 }

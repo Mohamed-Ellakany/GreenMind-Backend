@@ -29,6 +29,7 @@ public static class KernelSetup
         services.AddScoped<WeatherPlugin>();
         services.AddScoped<SoilPlugin>();
         services.AddScoped<TaskHistoryPlugin>();
+        services.AddScoped<RegulatoryDataPlugin>();
 
         services.AddScoped<IAgentPlanningService, AgentPlanningService>();
  
@@ -45,6 +46,7 @@ public static class KernelSetup
             builder.Plugins.AddFromObject(sp.GetRequiredService<WeatherPlugin>(), "Weather");
             builder.Plugins.AddFromObject(sp.GetRequiredService<SoilPlugin>(), "Soil");
             builder.Plugins.AddFromObject(sp.GetRequiredService<TaskHistoryPlugin>(), "TaskHistory");
+            builder.Plugins.AddFromObject(sp.GetRequiredService<RegulatoryDataPlugin>(), "RegulatoryData");
 
             var kernel = builder.Build();
 

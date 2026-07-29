@@ -5,6 +5,7 @@ using Greenmind.Api.Models;
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Greenmind.Application.Contracts.Api;
 
 namespace Greenmind.Api.Controllers;
 
@@ -112,12 +113,29 @@ public class AuthController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        if (!user.IsActive)
-            return Unauthorized(new { Message = "User account is not active." });
-
         var valid = await _userManager.CheckPasswordAsync(user, request.Password);
         if (!valid)
             return Unauthorized();
+
+        var farmApproval = await _db.Farms
+            .AsNoTracking()
+            .Where(farm => farm.OwnerUserId == user.Id)
+            .Select(farm => new { farm.IsApproved })
+            .SingleOrDefaultAsync();
+
+        if (farmApproval is { IsApproved: false })
+        {
+            return AccountStateUnauthorized(
+                ApiErrorCodes.AccountPendingApproval,
+                "Account is waiting for admin approval.");
+        }
+
+        if (!user.IsActive)
+        {
+            return AccountStateUnauthorized(
+                ApiErrorCodes.AccountInactive,
+                "User account is not active.");
+        }
 
         var roles = await _userManager.GetRolesAsync(user);
         var claims = new List<System.Security.Claims.Claim>
@@ -148,4 +166,13 @@ public class AuthController : ControllerBase
 
         return Ok(new LoginResponse { Token = token, ExpiresAtUtc = DateTime.UtcNow.AddHours(1) });
     }
+
+    private ObjectResult AccountStateUnauthorized(string code, string message) =>
+        StatusCode(
+            StatusCodes.Status401Unauthorized,
+            ApiResponseFactory.Failure<object?>(
+                StatusCodes.Status401Unauthorized,
+                code,
+                message,
+                HttpContext.TraceIdentifier));
 }

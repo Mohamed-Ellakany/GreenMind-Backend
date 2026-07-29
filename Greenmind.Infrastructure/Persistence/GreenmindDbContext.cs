@@ -16,10 +16,14 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<FarmTask> FarmTasks => Set<FarmTask>();
     public DbSet<TaskType> TaskTypes => Set<TaskType>();
     public DbSet<SoilMeasurement> SoilMeasurements => Set<SoilMeasurement>();
+    public DbSet<ActiveSubstance> ActiveSubstances => Set<ActiveSubstance>();
+    public DbSet<ProductMrl> ProductMrls => Set<ProductMrl>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GreenmindDbContext).Assembly);
 
         modelBuilder.Entity<IdentityRole>().HasData(
             new IdentityRole
@@ -39,19 +43,29 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
 
         modelBuilder.Entity<Crop>()
             .HasIndex(crop => crop.Name)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
 
         modelBuilder.Entity<Crop>()
             .Property(crop => crop.IsActive)
             .HasDefaultValue(true);
 
+        modelBuilder.Entity<Crop>()
+            .Property(crop => crop.IsDeleted)
+            .HasDefaultValue(false);
+
         modelBuilder.Entity<Destination>()
             .HasIndex(destination => destination.Name)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
 
         modelBuilder.Entity<Destination>()
             .Property(destination => destination.IsActive)
             .HasDefaultValue(true);
+
+        modelBuilder.Entity<Destination>()
+            .Property(destination => destination.IsDeleted)
+            .HasDefaultValue(false);
 
         modelBuilder.Entity<TaskType>().HasData(
           new TaskType { Id = 1, Name = "Irrigation", Description = "Watering schedule and management", CreatedAt = new DateTime(2026, 1, 1) },
