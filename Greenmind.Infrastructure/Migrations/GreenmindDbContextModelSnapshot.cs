@@ -165,6 +165,205 @@ namespace Greenmind.Infrastructure.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChatMessageId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Checksum")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatMessageId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.ToTable("ChatAttachments", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChatSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ContextReferencesJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ModelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatSessionId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("[IdempotencyKey] IS NOT NULL");
+
+                    b.HasIndex("ChatSessionId", "CreatedAt", "Id");
+
+                    b.ToTable("ChatMessages", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ExportPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FarmId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("SummaryThroughMessageId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SummaryThroughMessageId");
+
+                    b.HasIndex("ExportPlanId", "CreatedAt");
+
+                    b.HasIndex("FarmId", "Scope", "IsActive");
+
+                    b.ToTable("ChatSessions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ChatSessions_Scope", "([Scope] = 1 AND [ExportPlanId] IS NOT NULL) OR ([Scope] = 2 AND [ExportPlanId] IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ComplianceDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Crop")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SectionReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SourceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category", "Crop", "Destination");
+
+                    b.ToTable("ComplianceDocuments");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.Crop", b =>
                 {
                     b.Property<int>("Id")
@@ -204,7 +403,7 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("Crops", (string)null);
+                    b.ToTable("Crops");
 
                     b.HasData(
                         new
@@ -302,7 +501,7 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("Destinations", (string)null);
+                    b.ToTable("Destinations");
 
                     b.HasData(
                         new
@@ -377,6 +576,318 @@ namespace Greenmind.Infrastructure.Migrations
                             IsDeleted = false,
                             Name = "Saudi Arabia"
                         });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Checksum")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DiseaseReportId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DiseaseReportId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.ToTable("DiseaseImages", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdvisoryWarning")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("AffectedArea")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("ConfidencePercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ExportImpact")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ExportPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ModelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateOnly>("ObservationDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ObservedSymptoms")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PromptVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("RecommendedActions")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("Severity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SuspectedDisease")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("UserNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.HasIndex("ExportPlanId", "ObservationDate", "CreatedAt");
+
+                    b.ToTable("DiseaseReports", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DiseaseReports_Confidence", "[ConfidencePercentage] IS NULL OR ([ConfidencePercentage] >= 0 AND [ConfidencePercentage] <= 100)");
+                        });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.Expense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ExpenseCategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ExpenseDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("ExportPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Supplier")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int?>("TaskId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DeletedByUserId");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ExpenseCategoryId", "IsDeleted");
+
+                    b.HasIndex("ExportPlanId", "IsDeleted", "ExpenseDate");
+
+                    b.ToTable("Expenses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Expenses_Amount", "[Amount] >= 0");
+
+                            t.HasCheckConstraint("CK_Expenses_Quantity", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_Expenses_UnitPrice", "[UnitPrice] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExpenseAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttachmentType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Checksum")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExpenseId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("UploadedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpenseId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.ToTable("ExpenseAttachments", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExpenseCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FarmId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ExpenseCategories", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlan", b =>
@@ -474,7 +985,77 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("ExportPlans", (string)null);
+                    b.ToTable("ExportPlans");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExportPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal?>("TotalBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportPlanId")
+                        .IsUnique();
+
+                    b.ToTable("ExportPlanBudgets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ExportPlanBudgets_TotalBudget", "[TotalBudget] IS NULL OR [TotalBudget] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudgetLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BudgetId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExpenseCategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PlannedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpenseCategoryId");
+
+                    b.HasIndex("BudgetId", "ExpenseCategoryId")
+                        .IsUnique();
+
+                    b.ToTable("ExportPlanBudgetLines", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ExportPlanBudgetLines_PlannedAmount", "[PlannedAmount] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Farm", b =>
@@ -508,7 +1089,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("OwnerUserId")
                         .IsUnique();
 
-                    b.ToTable("Farms", (string)null);
+                    b.ToTable("Farms");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
@@ -562,9 +1143,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
                         .IsUnique();
 
-                    b.HasIndex("TaskTypeId");
-
-                    b.ToTable("FarmTasks", (string)null);
+                    b.ToTable("FarmTasks");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ProductMrl", b =>
@@ -669,7 +1248,104 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("ExportPlanId");
 
-                    b.ToTable("SoilMeasurements", (string)null);
+                    b.ToTable("SoilMeasurements");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExportPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("SourceChatMessageId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourceDiseaseReportId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("SourceChatMessageId");
+
+                    b.HasIndex("SourceDiseaseReportId");
+
+                    b.HasIndex("ExportPlanId", "Status", "ExpiresAtUtc");
+
+                    b.ToTable("TaskChangeProposals", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TaskChangeProposals_Source", "NOT ([SourceChatMessageId] IS NOT NULL AND [SourceDiseaseReportId] IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposalItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("FarmTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Operation")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OriginalValuesJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProposedValuesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("TaskChangeProposalId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmTaskId");
+
+                    b.HasIndex("TaskChangeProposalId");
+
+                    b.ToTable("TaskChangeProposalItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TaskChangeProposalItems_Target", "([Operation] = 1 AND [FarmTaskId] IS NULL) OR ([Operation] IN (2, 3) AND [FarmTaskId] IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskType", b =>
@@ -694,7 +1370,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TaskTypes", (string)null);
+                    b.ToTable("TaskTypes");
 
                     b.HasData(
                         new
@@ -904,6 +1580,153 @@ namespace Greenmind.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatAttachment", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ChatMessage", "ChatMessage")
+                        .WithMany("Attachments")
+                        .HasForeignKey("ChatMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChatMessage");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatMessage", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ChatSession", "ChatSession")
+                        .WithMany("Messages")
+                        .HasForeignKey("ChatSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChatSession");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatSession", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
+                        .WithMany("ChatSessions")
+                        .HasForeignKey("ExportPlanId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Greenmind.Domain.Entities.Farm", "Farm")
+                        .WithMany("ChatSessions")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.ChatMessage", "SummaryThroughMessage")
+                        .WithMany()
+                        .HasForeignKey("SummaryThroughMessageId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("ExportPlan");
+
+                    b.Navigation("Farm");
+
+                    b.Navigation("SummaryThroughMessage");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseImage", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.DiseaseReport", "DiseaseReport")
+                        .WithMany("Images")
+                        .HasForeignKey("DiseaseReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DiseaseReport");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseReport", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
+                        .WithMany("DiseaseReports")
+                        .HasForeignKey("ExportPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExportPlan");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.Expense", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "DeletedByUser")
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Greenmind.Domain.Entities.ExpenseCategory", "ExpenseCategory")
+                        .WithMany("Expenses")
+                        .HasForeignKey("ExpenseCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
+                        .WithMany("Expenses")
+                        .HasForeignKey("ExportPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.FarmTask", "Task")
+                        .WithMany("Expenses")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("DeletedByUser");
+
+                    b.Navigation("ExpenseCategory");
+
+                    b.Navigation("ExportPlan");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExpenseAttachment", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.Expense", "Expense")
+                        .WithMany("Attachments")
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Expense");
+
+                    b.Navigation("UploadedByUser");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExpenseCategory", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.Farm", "Farm")
+                        .WithMany("ExpenseCategories")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Farm");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlan", b =>
                 {
                     b.HasOne("Greenmind.Domain.Entities.Crop", "Crop")
@@ -929,6 +1752,36 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("Destination");
 
                     b.Navigation("Farm");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudget", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
+                        .WithOne("Budget")
+                        .HasForeignKey("Greenmind.Domain.Entities.ExportPlanBudget", "ExportPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExportPlan");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudgetLine", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlanBudget", "Budget")
+                        .WithMany("Lines")
+                        .HasForeignKey("BudgetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.ExpenseCategory", "ExpenseCategory")
+                        .WithMany("BudgetLines")
+                        .HasForeignKey("ExpenseCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Budget");
+
+                    b.Navigation("ExpenseCategory");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Farm", b =>
@@ -970,6 +1823,56 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ExportPlan");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
+                        .WithMany("TaskChangeProposals")
+                        .HasForeignKey("ExportPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Greenmind.Domain.Entities.ChatMessage", "SourceChatMessage")
+                        .WithMany("Proposals")
+                        .HasForeignKey("SourceChatMessageId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Greenmind.Domain.Entities.DiseaseReport", "SourceDiseaseReport")
+                        .WithMany("Proposals")
+                        .HasForeignKey("SourceDiseaseReportId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("ExportPlan");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("SourceChatMessage");
+
+                    b.Navigation("SourceDiseaseReport");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposalItem", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.FarmTask", "FarmTask")
+                        .WithMany("ProposalItems")
+                        .HasForeignKey("FarmTaskId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Greenmind.Domain.Entities.TaskChangeProposal", "TaskChangeProposal")
+                        .WithMany("Items")
+                        .HasForeignKey("TaskChangeProposalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FarmTask");
+
+                    b.Navigation("TaskChangeProposal");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -1028,6 +1931,18 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("Farm");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatMessage", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ChatSession", b =>
+                {
+                    b.Navigation("Messages");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.Crop", b =>
                 {
                     b.Navigation("ExportPlans");
@@ -1038,16 +1953,66 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("ExportPlans");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseReport", b =>
+                {
+                    b.Navigation("Images");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.Expense", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExpenseCategory", b =>
+                {
+                    b.Navigation("BudgetLines");
+
+                    b.Navigation("Expenses");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlan", b =>
                 {
+                    b.Navigation("Budget");
+
+                    b.Navigation("ChatSessions");
+
+                    b.Navigation("DiseaseReports");
+
+                    b.Navigation("Expenses");
+
                     b.Navigation("FarmTasks");
 
                     b.Navigation("SoilMeasurements");
+
+                    b.Navigation("TaskChangeProposals");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudget", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Farm", b =>
                 {
+                    b.Navigation("ChatSessions");
+
+                    b.Navigation("ExpenseCategories");
+
                     b.Navigation("ExportPlans");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
+                {
+                    b.Navigation("Expenses");
+
+                    b.Navigation("ProposalItems");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskType", b =>

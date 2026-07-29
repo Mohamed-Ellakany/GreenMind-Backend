@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Greenmind.Application.Interfaces.AI;
 
 namespace Greenmind.Application.Tests.Integration;
 
@@ -38,6 +39,8 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
                 options.UseInMemoryDatabase(_databaseName));
 
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            services.RemoveAll<IConversationAiService>();
+            services.AddSingleton<IConversationAiService, StubConversationAiService>();
 
             services.AddAuthentication(options =>
                 {
@@ -108,6 +111,20 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
     {
         Dispose();
         return Task.CompletedTask;
+    }
+}
+
+internal sealed class StubConversationAiService : IConversationAiService
+{
+    public async IAsyncEnumerable<string> StreamReplyAsync(
+        ConversationAiRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return "إجابة ";
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return "آمنة";
     }
 }
 

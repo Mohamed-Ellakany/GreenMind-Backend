@@ -5,6 +5,8 @@ using Microsoft.Extensions.Hosting;
 using System.Threading.Tasks;
 using Greenmind.Domain.Entities;
 using Greenmind.Domain.Consts;
+using Greenmind.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Greenmind.Api.Seed;
 
@@ -17,6 +19,7 @@ public static class SeedExtensions
 
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var dbContext = services.GetRequiredService<GreenmindDbContext>();
 
         var roles = new[] { RoleNames.Admin, RoleNames.FarmOwner };
         foreach (var r in roles)
@@ -50,5 +53,37 @@ public static class SeedExtensions
             if (await userManager.IsInRoleAsync(admin, "PlatformAdmin"))
                 await userManager.RemoveFromRoleAsync(admin, "PlatformAdmin");
         }
+
+        var farms = await dbContext.Farms
+            .AsNoTracking()
+            .Select(farm => farm.Id)
+            .ToListAsync();
+
+        var existingCategories = await dbContext.ExpenseCategories
+            .AsNoTracking()
+            .Select(category => new { category.FarmId, category.Name })
+            .ToListAsync();
+
+        var existing = existingCategories
+            .Select(category => (category.FarmId, category.Name))
+            .ToHashSet();
+
+        foreach (var farmId in farms)
+        {
+            foreach (var name in DefaultExpenseCategories.ArabicNames)
+            {
+                if (existing.Add((farmId, name)))
+                {
+                    dbContext.ExpenseCategories.Add(new ExpenseCategory
+                    {
+                        FarmId = farmId,
+                        Name = name,
+                        IsDefault = true
+                    });
+                }
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
     }
 }

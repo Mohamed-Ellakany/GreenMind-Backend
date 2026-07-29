@@ -48,6 +48,7 @@ namespace Greenmind.Api
             builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(opts =>
             {
                 opts.JsonSerializerOptions.Converters.Add(new Greenmind.Api.Json.DateOnlyConverter());
+                opts.JsonSerializerOptions.Converters.Add(new Greenmind.Api.Json.ArabicBusinessEnumJsonConverterFactory());
                 opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
 

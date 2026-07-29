@@ -16,6 +16,14 @@ using Greenmind.Application.Contracts.Planning;
 using Greenmind.Infrastructure.Planning;
 using Greenmind.Application.Contracts.Regulatory;
 using Greenmind.Infrastructure.Regulatory;
+using Greenmind.Application.Contracts.Chat;
+using Greenmind.Application.Interfaces.AI;
+using Greenmind.Infrastructure.Agents;
+using Greenmind.Infrastructure.Chat;
+using Greenmind.Application.Contracts.TaskProposals;
+using Greenmind.Infrastructure.TaskProposals;
+using Greenmind.Application.Contracts.Costs;
+using Greenmind.Infrastructure.Costs;
 
 namespace Greenmind.Infrastructure;
 
@@ -30,7 +38,7 @@ public static class DependencyInjection
         services.AddScoped<IExportPlanRepository, ExportPlanRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<ITaskTypeRepository, TaskTypeRepository>();
-        services.AddScoped<ISoilMeasurementRepository, SoilMeasurementRepository>();
+        services.AddScoped<Greenmind.Application.Contracts.Persistence.ISoilMeasurementRepository, SoilMeasurementRepository>();
         services.AddScoped<Greenmind.Application.Services.IFuturePlannedDaysCalculationService, FuturePlannedDaysCalculationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPlatformAdminService, PlatformAdminService>();
@@ -46,6 +54,10 @@ public static class DependencyInjection
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRegulatoryDataImportService, RegulatoryDataImportService>();
         services.AddScoped<IRegulatoryKnowledgeQueryService, RegulatoryKnowledgeQueryService>();
+        services.AddScoped<IConversationAiService, ConversationAiService>();
+        services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<ITaskChangeProposalService, TaskChangeProposalService>();
+        services.AddScoped<ICostManagementService, CostManagementService>();
 
         return services;
     }

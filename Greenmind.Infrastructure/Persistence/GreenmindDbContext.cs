@@ -9,6 +9,8 @@ namespace Greenmind.Infrastructure.Persistence;
 public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     : IdentityDbContext<ApplicationUser>(options)   
 {
+
+    public DbSet<ComplianceDocument> ComplianceDocuments => Set<ComplianceDocument>();
     public DbSet<Farm> Farms => Set<Farm>();
     public DbSet<Crop> Crops => Set<Crop>();
     public DbSet<Destination> Destinations => Set<Destination>();
@@ -18,6 +20,18 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<SoilMeasurement> SoilMeasurements => Set<SoilMeasurement>();
     public DbSet<ActiveSubstance> ActiveSubstances => Set<ActiveSubstance>();
     public DbSet<ProductMrl> ProductMrls => Set<ProductMrl>();
+    public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
+    public DbSet<TaskChangeProposal> TaskChangeProposals => Set<TaskChangeProposal>();
+    public DbSet<TaskChangeProposalItem> TaskChangeProposalItems => Set<TaskChangeProposalItem>();
+    public DbSet<DiseaseReport> DiseaseReports => Set<DiseaseReport>();
+    public DbSet<DiseaseImage> DiseaseImages => Set<DiseaseImage>();
+    public DbSet<ExpenseCategory> ExpenseCategories => Set<ExpenseCategory>();
+    public DbSet<ExportPlanBudget> ExportPlanBudgets => Set<ExportPlanBudget>();
+    public DbSet<ExportPlanBudgetLine> ExportPlanBudgetLines => Set<ExportPlanBudgetLine>();
+    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<ExpenseAttachment> ExpenseAttachments => Set<ExpenseAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -184,5 +198,21 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
         modelBuilder.Entity<FarmTask>()
             .Property(t => t.Priority)
             .HasConversion<string>();
+
+
+
+        modelBuilder.Entity<ComplianceDocument>(entity =>
+        {
+            // Store enum as string for readability in the DB (consistent with your other enums)
+            entity.Property(d => d.Category).HasConversion<string>();
+
+            // Index the columns the repository actually filters on, since SearchAsync
+            // pre-filters by Category/Crop/Destination before doing vector math in memory.
+            entity.HasIndex(d => new { d.Category, d.Crop, d.Destination });
+
+            // Embedding JSON can get long (1536 floats ≈ 20-30KB as text) - use unbounded/max length.
+            entity.Property(d => d.Embedding).HasColumnType("nvarchar(max)");
+            entity.Property(d => d.Content).HasColumnType("nvarchar(max)");
+        });
     }
 }

@@ -6,6 +6,7 @@ using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Greenmind.Application.Contracts.Api;
+using Greenmind.Domain.Consts;
 
 namespace Greenmind.Api.Controllers;
 
@@ -90,6 +91,15 @@ public class AuthController : ControllerBase
         };
 
         await _unitOfWork.Farms.AddAsync(farm);
+        await _unitOfWork.SaveChangesAsync();
+
+        _db.ExpenseCategories.AddRange(DefaultExpenseCategories.ArabicNames.Select(name =>
+            new ExpenseCategory
+            {
+                FarmId = farm.Id,
+                Name = name,
+                IsDefault = true
+            }));
         await _unitOfWork.SaveChangesAsync();
 
         await tx.CommitAsync();
