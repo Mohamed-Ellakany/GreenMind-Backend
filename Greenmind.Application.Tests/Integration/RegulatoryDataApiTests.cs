@@ -136,6 +136,31 @@ public sealed class RegulatoryDataApiTests(GreenmindApiFactory factory)
     }
 
     [Fact]
+    public async Task ArabicActiveSubstanceName_FindsEnglishRegulatoryRecord()
+    {
+        var region = await AddDestinationAsync();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+        context.ActiveSubstances.Add(new ActiveSubstance
+        {
+            RegionName = region,
+            ExternalId = 75,
+            Name = "Propiconazole",
+            CasNumber = "60207-90-1",
+            ApprovalStatus = ActiveSubstanceApprovalStatus.غير_معتمد
+        });
+        await context.SaveChangesAsync();
+
+        var knowledge = scope.ServiceProvider.GetRequiredService<IRegulatoryKnowledgeQueryService>();
+        var result = Assert.Single(
+            await knowledge.FindActiveSubstancesAsync(region, "بروبيكونازول"));
+
+        Assert.Equal("Propiconazole", result.Name);
+        Assert.Equal("60207-90-1", result.CasNumber);
+        Assert.Equal("غير معتمد", result.ApprovalStatus);
+    }
+
+    [Fact]
     public async Task InvalidWorkbook_IsRejectedWithoutReplacingCurrentData()
     {
         var region = await AddDestinationAsync();

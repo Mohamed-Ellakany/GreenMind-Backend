@@ -19,25 +19,39 @@ public sealed class InitialExportPlanPlanningService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await RecoverStaleJobsAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), timeProvider);
-        do
+        try
         {
-            try
+            await RecoverStaleJobsAsync(stoppingToken);
+
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), timeProvider);
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await ProcessNextAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                logger.LogError(exception, "Initial export-plan planning worker failed while polling.");
+                try
+                {
+                    await ProcessNextAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(exception, "Initial export-plan planning worker failed while polling.");
+                }
+
+                if (!await timer.WaitForNextTickAsync(stoppingToken))
+                    break;
             }
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal host shutdown, including shutdown caused by a startup failure.
+        }
+        catch (ObjectDisposedException) when (stoppingToken.IsCancellationRequested)
+        {
+            // The root provider may already be disposed after another hosted
+            // service or Kestrel fails during startup.
+        }
     }
 
     private async Task ProcessNextAsync(CancellationToken cancellationToken)
@@ -80,6 +94,10 @@ public sealed class InitialExportPlanPlanningService(
             plan.NextPlanningAttemptAtUtc = null;
             plan.GeneratedTaskCount = count;
             await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception)
         {

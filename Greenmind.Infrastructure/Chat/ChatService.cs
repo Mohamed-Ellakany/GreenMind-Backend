@@ -578,7 +578,7 @@ public sealed class ChatService(
         var plans = await dbContext.ExportPlans
             .AsNoTracking()
             .Where(plan => plan.FarmId == farmId && plan.Farm.OwnerUserId == ownerUserId)
-            .OrderBy(plan => plan.ExpectedExportDate)
+            .OrderBy(plan => plan.Id)
             .Select(plan => new
             {
                 plan.Id,
@@ -596,7 +596,23 @@ public sealed class ChatService(
             })
             .ToListAsync(cancellationToken);
 
-        return JsonSerializer.Serialize(new { farmId, plans }, ContextJsonOptions);
+        var orderedPlans = plans.Select((plan, index) => new
+        {
+            Ordinal = index + 1,
+            plan.Id,
+            plan.Name,
+            plan.Crop,
+            plan.Destination,
+            plan.Status,
+            plan.ExpectedHarvestDate,
+            plan.ExpectedExportDate,
+            plan.TaskCount,
+            plan.PendingTaskCount,
+            plan.DiseaseReportCount,
+            plan.ActualExpenses
+        });
+
+        return JsonSerializer.Serialize(new { farmId, plans = orderedPlans }, ContextJsonOptions);
     }
 
     private static ChatSessionDto MapSession(ChatSession session) => new(

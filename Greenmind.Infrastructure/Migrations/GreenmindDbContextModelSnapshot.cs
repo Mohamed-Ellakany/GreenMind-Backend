@@ -361,7 +361,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("Category", "Crop", "Destination");
 
-                    b.ToTable("ComplianceDocuments");
+                    b.ToTable("ComplianceDocuments", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Crop", b =>
@@ -403,7 +403,7 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("Crops");
+                    b.ToTable("Crops", (string)null);
 
                     b.HasData(
                         new
@@ -501,7 +501,7 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("Destinations");
+                    b.ToTable("Destinations", (string)null);
 
                     b.HasData(
                         new
@@ -985,7 +985,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("ExportPlans");
+                    b.ToTable("ExportPlans", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudget", b =>
@@ -1089,7 +1089,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("OwnerUserId")
                         .IsUnique();
 
-                    b.ToTable("Farms");
+                    b.ToTable("Farms", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
@@ -1143,7 +1143,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
                         .IsUnique();
 
-                    b.ToTable("FarmTasks");
+                    b.ToTable("FarmTasks", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ProductMrl", b =>
@@ -1248,7 +1248,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("ExportPlanId");
 
-                    b.ToTable("SoilMeasurements");
+                    b.ToTable("SoilMeasurements", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
@@ -1370,7 +1370,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TaskTypes");
+                    b.ToTable("TaskTypes", (string)null);
 
                     b.HasData(
                         new

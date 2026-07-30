@@ -17,7 +17,7 @@ public sealed class RegulatoryKnowledgeQueryService(GreenmindDbContext context)
         CancellationToken cancellationToken = default)
     {
         var region = NormalizeRequired(regionName);
-        var search = NormalizeRequired(nameOrCasOrId);
+        var search = ResolveActiveSubstanceSearch(NormalizeRequired(nameOrCasOrId));
         var isExternalId = int.TryParse(search, out var externalId);
 
         var items = await context.ActiveSubstances
@@ -89,6 +89,20 @@ public sealed class RegulatoryKnowledgeQueryService(GreenmindDbContext context)
 
         return value.Trim();
     }
+
+    private static string ResolveActiveSubstanceSearch(string search) =>
+        search switch
+        {
+            // The regulatory workbook stores substance names in English, while farm
+            // owners commonly ask for them in Arabic. Keep aliases deterministic so
+            // a translated display name cannot turn an existing row into "not found".
+            "بروبيكونازول" => "Propiconazole",
+            "أبامكتين" => "Abamectin",
+            "ابامكتين" => "Abamectin",
+            "إيميداكلوبريد" => "Imidacloprid",
+            "ايميداكلوبريد" => "Imidacloprid",
+            _ => search
+        };
 
     private static string ToArabicStatus(ActiveSubstanceApprovalStatus status) => status switch
     {

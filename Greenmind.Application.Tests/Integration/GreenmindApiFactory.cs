@@ -17,6 +17,7 @@ using Greenmind.Application.Contracts.Disease;
 using Greenmind.Application.Dtos.Disease;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Infrastructure.Storage;
+using Greenmind.Infrastructure.Rag;
 
 namespace Greenmind.Application.Tests.Integration;
 
@@ -51,6 +52,8 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
                 options.RootPath = PrivateStorageRoot);
             services.RemoveAll<IConversationAiService>();
             services.AddSingleton<IConversationAiService, StubConversationAiService>();
+            services.RemoveAll<IComplianceIngestionService>();
+            services.AddSingleton<IComplianceIngestionService, StubComplianceIngestionService>();
             services.RemoveAll<IPlanTaskProposalGenerator>();
             services.AddSingleton<IPlanTaskProposalGenerator, StubPlanTaskProposalGenerator>();
             services.RemoveAll<IDiseaseVisionAnalyzer>();
@@ -168,6 +171,27 @@ internal sealed class StubConversationAiService : IConversationAiService
         cancellationToken.ThrowIfCancellationRequested();
         yield return "آمنة";
     }
+}
+
+internal sealed class StubComplianceIngestionService : IComplianceIngestionService
+{
+    public Task<int> IngestFfvStandardAsync(
+        Stream pdfStream,
+        string crop,
+        string sourceName,
+        CancellationToken ct = default) => Task.FromResult(7);
+
+    public Task<int> IngestEuRegulationBodyAsync(
+        Stream pdfStream,
+        string sourceName,
+        CancellationToken ct = default) => Task.FromResult(11);
+
+    public Task<int> IngestEuRegulationAnnexForCropAsync(
+        Stream pdfStream,
+        string sourceName,
+        string annexLabelHint,
+        string[] cropKeywords,
+        CancellationToken ct = default) => Task.FromResult(3);
 }
 
 internal sealed class IntegrationTestAuthHandler(
