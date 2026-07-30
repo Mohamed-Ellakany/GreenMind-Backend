@@ -24,6 +24,8 @@ namespace Greenmind.Domain.Entities
         public ApplicationUser Owner { get; set; } = null!;
 
         public ICollection<ExportPlan> ExportPlans { get; set; } = new List<ExportPlan>();
+        public ICollection<ChatSession> ChatSessions { get; set; } = new List<ChatSession>();
+        public ICollection<ExpenseCategory> ExpenseCategories { get; set; } = new List<ExpenseCategory>();
 
     }
 }

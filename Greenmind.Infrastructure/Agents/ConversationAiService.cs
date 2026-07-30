@@ -1,0 +1,367 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using Greenmind.Application.Contracts.Regulatory;
+using Greenmind.Application.Interfaces.AI;
+using Greenmind.Domain.Consts.Enums;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+
+namespace Greenmind.Infrastructure.Agents;
+
+public sealed class ConversationAiService(
+    Kernel kernel,
+    IRegulatoryKnowledgeQueryService regulatoryQueryService) : IConversationAiService
+{
+    public async IAsyncEnumerable<string> StreamReplyAsync(
+        ConversationAiRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var deterministicRegulatoryReply = await TryBuildRegulatoryDecisionReplyAsync(
+            request,
+            cancellationToken);
+        if (deterministicRegulatoryReply is not null)
+        {
+            yield return deterministicRegulatoryReply;
+            yield break;
+        }
+
+        var history = new ChatHistory();
+        history.AddSystemMessage(BuildSystemPrompt(request.Scope));
+        history.AddSystemMessage(BuildComplianceKnowledgePrompt());
+        history.AddSystemMessage($"عنوان المحادثة: {request.SessionTitle}");
+
+        if (!string.IsNullOrWhiteSpace(request.ConversationSummary))
+        {
+            history.AddSystemMessage($"ملخص المحادثة السابقة:\n{request.ConversationSummary}");
+        }
+
+        history.AddSystemMessage(
+            "السياق التالي أنشأه الخادم من بيانات المزرعة المصرح بها فقط. " +
+            "لا تفترض أي بيانات غير موجودة فيه:\n" + request.ContextJson);
+
+        foreach (var item in request.RecentMessages)
+        {
+            history.AddMessage(MapRole(item.Role), item.Content);
+        }
+
+        history.AddSystemMessage(
+            "أجب عن الرسالة الحالية الآن إجابة مكتملة. لا تكرر وعدًا سابقًا مثل «سأتحقق» أو «لحظة من فضلك». " +
+            "أكواد عبوات المبيدات مثل EC والنسب المئوية والأوزان وأسماء المواد الفعالة هي بيانات زراعية، " +
+            "ولا يجوز تفسيرها على أنها سؤال شخصي أو عن الزواج.");
+        history.AddUserMessage(request.UserMessage);
+
+        var functionChoiceBehavior = RequiresRegulatoryLookup(request)
+            ? FunctionChoiceBehavior.Required(
+            [
+                kernel.Plugins.GetFunction("RegulatoryData", "find_active_substance"),
+                kernel.Plugins.GetFunction("RegulatoryData", "find_product_mrl")
+            ])
+            : FunctionChoiceBehavior.Auto();
+
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            Temperature = 0.2,
+            // Pesticide questions must perform at least one real regulatory lookup.
+            // Required() advertises the functions only for the first model request,
+            // so Semantic Kernel can invoke them and then obtain a user-facing answer
+            // without entering a repeated tool-call loop.
+            FunctionChoiceBehavior = functionChoiceBehavior
+        };
+
+        var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
+        await foreach (var chunk in chatCompletion.GetStreamingChatMessageContentsAsync(
+                           history,
+                           settings,
+                           kernel,
+                           cancellationToken))
+        {
+            if (!string.IsNullOrEmpty(chunk.Content))
+            {
+                yield return chunk.Content;
+            }
+        }
+    }
+
+    private static AuthorRole MapRole(ChatMessageRole role) => role switch
+    {
+        ChatMessageRole.User => AuthorRole.User,
+        ChatMessageRole.Assistant => AuthorRole.Assistant,
+        _ => AuthorRole.System
+    };
+
+    internal static bool RequiresRegulatoryLookup(ConversationAiRequest request)
+    {
+        if (ContainsRegulatoryTerm(request.UserMessage))
+            return true;
+
+        // Short follow-ups such as "في الخطة الثانية" or "ينفع أستخدمه؟" inherit
+        // the pesticide subject from the recent conversation. This is the common
+        // two-turn path on the farm-wide assistant page.
+        if (request.UserMessage.Length <= 120 &&
+            request.RecentMessages.Any(item =>
+                item.Role == ChatMessageRole.User && ContainsRegulatoryTerm(item.Content)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsRegulatoryTerm(string value)
+    {
+        string[] terms =
+        [
+            "مبيد", "مبيدات", "المادة الفعالة", "مادة فعالة", "متبقيات",
+            "حد متبقي", "فترة الأمان", "فترة امان", "بروبيكونازول",
+            "pesticide", "active substance", "propiconazole", "mrl", "phi"
+        ];
+
+        return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<string?> TryBuildRegulatoryDecisionReplyAsync(
+        ConversationAiRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ContainsPesticideDecisionIntent(request.UserMessage))
+            return null;
+
+        var substanceSearches = FindKnownActiveSubstances(request.UserMessage);
+        if (substanceSearches.Count == 0)
+        {
+            substanceSearches = request.RecentMessages
+                .Where(item => item.Role == ChatMessageRole.User)
+                .Reverse()
+                .Select(item => FindKnownActiveSubstances(item.Content))
+                .FirstOrDefault(items => items.Count > 0) ?? [];
+        }
+
+        if (substanceSearches.Count == 0 ||
+            !TryGetSingleRegulatoryContext(request.ContextJson, out var region, out var crop))
+        {
+            return null;
+        }
+
+        var regionLabel = ToArabicRegion(region);
+        var cropLabel = ToArabicCrop(crop);
+        var replyLines = new List<string>();
+
+        foreach (var substanceSearch in substanceSearches)
+        {
+            var substances = await regulatoryQueryService.FindActiveSubstancesAsync(
+                region,
+                substanceSearch,
+                cancellationToken);
+            var substance = substances.FirstOrDefault();
+
+            if (substance is null)
+            {
+                replyLines.Add(
+                    $"لم أجد سجلًا للمادة الفعالة {substanceSearch} في قاعدة بيانات {regionLabel}. " +
+                    "ده لا يعني أنها مسموحة أو مرفوضة؛ يحتاج تحقق تنظيمي يدوي قبل الاستخدام.");
+                continue;
+            }
+
+            var cas = string.IsNullOrWhiteSpace(substance.CasNumber)
+                ? string.Empty
+                : $"، ورقم CAS هو {substance.CasNumber}";
+
+            if (substance.ApprovalStatus == "غير معتمد")
+            {
+                replyLines.Add(
+                    $"المادة الفعالة {substance.Name} موجودة في قاعدة بيانات {regionLabel}{cas}، " +
+                    "لكن حالتها «غير معتمد». لذلك لا تعتمد استخدام المنتج الذي يحتوي عليها ضمن خطة تصدير " +
+                    $"{cropLabel} إلى {regionLabel}.");
+                continue;
+            }
+
+            var mrls = await regulatoryQueryService.FindProductMrlsAsync(
+                region,
+                crop,
+                substance.Name,
+                cancellationToken);
+            var mrl = mrls.FirstOrDefault();
+            var mrlText = mrl?.MaximumResidueLevel is decimal value
+                ? $" حد المتبقيات المسجل لـ{cropLabel} هو {value} {mrl.Unit}" +
+                  (mrl.IsDetectionLimit ? " كحد كشف." : ".")
+                : $" لا يوجد حد متبقيات MRL مسجل لها على {cropLabel} في البيانات الحالية.";
+
+            replyLines.Add(
+                $"المادة الفعالة {substance.Name} موجودة في قاعدة بيانات {regionLabel}{cas}، " +
+                $"وحالة اعتمادها «{substance.ApprovalStatus}».{mrlText}");
+        }
+
+        return string.Join("\n", replyLines) +
+               "\n\nملحوظة مهمة: اعتماد المادة الفعالة وحده لا يثبت اعتماد الاسم التجاري أو الجرعة أو توقيت التطبيق. راجع ملصق المنتج والجهة التنظيمية قبل أي استخدام فعلي.";
+    }
+
+    private static bool ContainsPesticideDecisionIntent(string value)
+    {
+        string[] terms =
+        [
+            "ينفع", "استخدم", "استخدام", "مسموح", "معتمد", "اعتماد", "متبقيات", "mrl",
+            "can i use", "approved", "approval"
+        ];
+
+        return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<string> FindKnownActiveSubstances(string value)
+    {
+        var aliases = new (string Alias, string Search)[]
+        {
+            ("بروبيكونازول", "Propiconazole"),
+            ("propiconazole", "Propiconazole"),
+            ("أبامكتين", "Abamectin"),
+            ("ابامكتين", "Abamectin"),
+            ("abamectin", "Abamectin"),
+            ("إيميداكلوبريد", "Imidacloprid"),
+            ("ايميداكلوبريد", "Imidacloprid"),
+            ("imidacloprid", "Imidacloprid")
+        };
+
+        var found = new List<string>();
+        foreach (var (alias, search) in aliases)
+        {
+            if (!value.Contains(alias, StringComparison.OrdinalIgnoreCase) ||
+                found.Contains(search, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            found.Add(search);
+        }
+
+        return found;
+    }
+
+    private static bool TryGetSingleRegulatoryContext(
+        string contextJson,
+        out string region,
+        out string crop)
+    {
+        region = string.Empty;
+        crop = string.Empty;
+
+        try
+        {
+            using var document = JsonDocument.Parse(contextJson);
+            var root = document.RootElement;
+            if (root.TryGetProperty("plan", out var plan))
+                return TryReadPlanContext(plan, out region, out crop);
+
+            if (!root.TryGetProperty("plans", out var plans) ||
+                plans.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            var contexts = plans
+                .EnumerateArray()
+                .Select(item => TryReadPlanContext(item, out var itemRegion, out var itemCrop)
+                    ? (Region: itemRegion, Crop: itemCrop)
+                    : default)
+                .Where(item => !string.IsNullOrWhiteSpace(item.Region) &&
+                               !string.IsNullOrWhiteSpace(item.Crop))
+                .Distinct()
+                .ToList();
+
+            if (contexts.Count != 1)
+                return false;
+
+            region = contexts[0].Region;
+            crop = contexts[0].Crop;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadPlanContext(
+        JsonElement plan,
+        out string region,
+        out string crop)
+    {
+        region = plan.TryGetProperty("destination", out var destination)
+            ? destination.GetString() ?? string.Empty
+            : string.Empty;
+        crop = plan.TryGetProperty("crop", out var cropElement)
+            ? cropElement.GetString() ?? string.Empty
+            : string.Empty;
+        return !string.IsNullOrWhiteSpace(region) && !string.IsNullOrWhiteSpace(crop);
+    }
+
+    private static string ToArabicRegion(string region) =>
+        region.Equals("European Union", StringComparison.OrdinalIgnoreCase)
+            ? "الاتحاد الأوروبي"
+            : region;
+
+    private static string ToArabicCrop(string crop) =>
+        crop.Equals("Strawberry", StringComparison.OrdinalIgnoreCase)
+            ? "الفراولة"
+            : crop;
+
+    private static string BuildComplianceKnowledgePrompt() =>
+        """
+        قاعدة المعرفة التنظيمية متاحة لك في المحادثة العامة ومحادثة خطة التصدير معًا عبر أدوات ComplianceRag.
+        استخدم الأداة المناسبة قبل الإجابة عندما يسأل المستخدم عن متطلبات الجودة أو التصنيف أو الأحجام أو التعبئة،
+        أو اشتراطات الصحة النباتية، أو الحدود القصوى للمتبقيات وفترات الأمان، أو علاج الأمراض.
+
+        - استخدم search_quality_grading_rules لمعايير الجودة والتصنيف والتعبئة.
+        - استخدم search_phytosanitary_rules لاشتراطات الصحة النباتية ودخول الأسواق.
+        - استخدم search_pesticide_residue_rules لقواعد المتبقيات وفترات الأمان عندما تكون هي المصدر المطلوب،
+          مع الالتزام كذلك بقواعد RegulatoryData للبيانات الجدولية المستوردة.
+        - استخدم search_disease_treatment عند طلب بروتوكول علاج مرض.
+        - استخدم اسم المحصول كما يرد في سياق الخادم. في المحادثة العامة التي تضم أكثر من محصول، حدّد المحصول المقصود
+          من سؤال المستخدم والسياق، واطلب توضيحًا إذا ظل الاختيار غامضًا.
+        - اعرض اسم المصدر ومرجع القسم اللذين تعيدهما الأداة عند الاستناد إلى النتيجة، ولا تخترع قاعدة غير موجودة.
+        - إذا لم تُرجع الأداة نتائج، صرّح بأن قاعدة المعرفة لا تحتوي مصدرًا مناسبًا واطلب التحقق اليدوي.
+        """;
+
+    private static string BuildSystemPrompt(ChatScope scope) =>
+        scope == ChatScope.Farm
+            ? """
+              أنت «عم خضر»، المساعد الزراعي المصري في منصة GreenMind. أجب بالعربية المصرية المهنية، بوضوح واختصار.
+              محادثة المزرعة للقراءة والمقارنة فقط. لا تنشئ أو تعدل أو تلغي أي مهمة،
+              ولا تدّع تنفيذ أي إجراء. عند طلب تغيير تشغيلي، حدد خطة التصدير المعنية
+              واطلب من المستخدم فتح محادثة تلك الخطة. استخدم فقط سياق الخادم.
+              الخطة ذات ordinal=2 هي «الخطة الثانية». وإذا قال المستخدم «خطة 2» فطابق plan.id=2 أولاً،
+              ثم استخدم ordinal=2 فقط عند عدم وجود خطة بهذا المعرّف. لا تطلب المحصول أو الوجهة إذا كانا
+              موجودين بالفعل في بيانات الخطة المختارة داخل سياق الخادم.
+
+              قواعد البيانات التنظيمية إلزامية عند الحديث عن المبيدات:
+              - قبل الحكم على اعتماد مادة فعالة أو صلاحية مبيد لوجهة تصدير، استدعِ find_active_substance
+                مستخدمًا وجهة الخطة كما تظهر حرفيًا في سياق الخادم، وابحث باسم المادة الفعالة أو CAS أو رقمها.
+              - قبل ذكر حد متبقيات MRL، استدعِ find_product_mrl مستخدمًا وجهة الخطة والمحصول كما يظهران
+                حرفيًا في سياق الخادم، وابحث باسم المادة الفعالة/المتبقي أو رقم المبيد.
+              - إذا ذكر المستخدم اسمًا تجاريًا وتركيبه، ابحث بالمادة الفعالة المذكورة، ولا تفترض أن اعتماد
+                المادة يعني تلقائيًا اعتماد المنتج التجاري أو الاستخدام المحدد.
+              - لا تقل «سأتحقق» أو «لحظة من فضلك» كإجابة. استدعِ الأداة ثم قدم النتيجة الحالية في نفس الرد.
+              - النتيجة الفارغة تعني أن السجل غير موجود في البيانات المستوردة، لا أنه معتمد أو مرفوض.
+                صرّح بذلك واطلب التحقق التنظيمي اليدوي، ولا تخترع قيمة MRL أو فترة أمان.
+              - إذا أعادت find_active_substance سجلًا، فالمادة موجودة في قاعدة البيانات. اذكر حالة الاعتماد التي أعادتها الأداة حرفيًا.
+                حالة «غير معتمد» تعني أن المادة موجودة لكنها غير معتمدة، ولا يجوز وصفها بأنها «غير موجودة».
+              - ميّز بوضوح بين حالة اعتماد المادة الفعالة وبين حد المتبقيات الخاص بالمحصول والوجهة.
+              """
+            : """
+              أنت «عم خضر»، المساعد الزراعي المصري في منصة GreenMind. أجب بالعربية المصرية المهنية، بوضوح واختصار.
+              استخدم فقط سياق خطة التصدير الذي يقدمه الخادم. لا تدّع تنفيذ أي تغيير
+              على المهام. أي تغيير محتمل يجب أن يظل اقتراحاً يحتاج إلى معاينة وموافقة
+              صريحة من مالك المزرعة. اذكر عدم اليقين ولا تقدّم تشخيصاً مخبرياً مؤكداً.
+
+              قواعد البيانات التنظيمية إلزامية عند الحديث عن المبيدات:
+              - قبل الحكم على اعتماد مادة فعالة أو صلاحية مبيد لوجهة التصدير، استدعِ find_active_substance
+                بوجهة الخطة كما تظهر حرفيًا في سياق الخادم.
+              - قبل ذكر MRL أو تقييم المتبقيات، استدعِ find_product_mrl بوجهة الخطة ومحصولها كما يظهران
+                حرفيًا في سياق الخادم.
+              - لا تقل «سأتحقق» أو «لحظة من فضلك» كإجابة. استدعِ الأداة ثم قدم النتيجة في نفس الرد.
+                النتيجة الفارغة تعني عدم وجود سجل
+                في البيانات المستوردة، ولا تسمح باستنتاج الاعتماد أو الرفض أو اختراع قيمة.
+              - إذا أعادت find_active_substance سجلًا، فالمادة موجودة في قاعدة البيانات. اذكر حالة الاعتماد التي أعادتها الأداة حرفيًا.
+                حالة «غير معتمد» تعني أن المادة موجودة لكنها غير معتمدة، ولا يجوز وصفها بأنها «غير موجودة».
+              - اعتماد المادة الفعالة لا يثبت وحده اعتماد المنتج التجاري أو الاستخدام المقترح.
+              """;
+}

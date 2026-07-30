@@ -106,9 +106,18 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
         return AdminOperationResult<FarmAccountDto>.Success(MapFarm(farm));
     }
 
-    public async Task<IReadOnlyList<MasterDataItemDto>> GetCropsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MasterDataItemDto>> GetCropsAsync(
+        bool includeDeleted = false,
+        CancellationToken cancellationToken = default)
     {
-        return await context.Crops
+        var query = context.Crops.AsNoTracking();
+
+        if (!includeDeleted)
+        {
+            query = query.Where(crop => !crop.IsDeleted);
+        }
+
+        return await query
             .AsNoTracking()
             .OrderBy(crop => crop.Name)
             .Select(crop => new MasterDataItemDto(
@@ -116,6 +125,8 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
                 crop.Name,
                 crop.Description,
                 crop.IsActive,
+                crop.IsDeleted,
+                crop.DeletedAtUtc,
                 crop.CreatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -125,7 +136,9 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
         CancellationToken cancellationToken = default)
     {
         var name = request.Name.Trim();
-        if (await context.Crops.AnyAsync(crop => crop.Name.ToUpper() == name.ToUpper(), cancellationToken))
+        if (await context.Crops.AnyAsync(
+                crop => !crop.IsDeleted && crop.Name.ToUpper() == name.ToUpper(),
+                cancellationToken))
         {
             return AdminOperationResult<MasterDataItemDto>.Conflict("A crop with the same name already exists.");
         }
@@ -142,7 +155,7 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
         MasterDataRequest request,
         CancellationToken cancellationToken = default)
     {
-        var crop = await context.Crops.FindAsync([id], cancellationToken);
+        var crop = await context.Crops.FirstOrDefaultAsync(item => item.Id == id && !item.IsDeleted, cancellationToken);
         if (crop is null)
         {
             return AdminOperationResult<MasterDataItemDto>.NotFound("Crop was not found.");
@@ -150,7 +163,7 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
 
         var name = request.Name.Trim();
         if (await context.Crops.AnyAsync(
-                item => item.Id != id && item.Name.ToUpper() == name.ToUpper(),
+                item => item.Id != id && !item.IsDeleted && item.Name.ToUpper() == name.ToUpper(),
                 cancellationToken))
         {
             return AdminOperationResult<MasterDataItemDto>.Conflict("A crop with the same name already exists.");
@@ -174,15 +187,71 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
             return AdminOperationResult<MasterDataItemDto>.NotFound("Crop was not found.");
         }
 
+        if (crop.IsDeleted)
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict("Restore the crop before changing its status.");
+        }
+
         crop.IsActive = isActive;
         await context.SaveChangesAsync(cancellationToken);
         return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
     }
 
-    public async Task<IReadOnlyList<MasterDataItemDto>> GetDestinationsAsync(
+    public async Task<AdminOperationResult<MasterDataItemDto>> DeleteCropAsync(
+        int id,
         CancellationToken cancellationToken = default)
     {
-        return await context.Destinations
+        var crop = await context.Crops.FindAsync([id], cancellationToken);
+        if (crop is null)
+        {
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Crop was not found.");
+        }
+
+        if (!crop.IsDeleted)
+        {
+            crop.IsDeleted = true;
+            crop.DeletedAtUtc = DateTime.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> RestoreCropAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var crop = await context.Crops.FindAsync([id], cancellationToken);
+        if (crop is null)
+        {
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Crop was not found.");
+        }
+
+        if (await context.Crops.AnyAsync(
+                item => item.Id != id && !item.IsDeleted && item.Name.ToUpper() == crop.Name.ToUpper(),
+                cancellationToken))
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict("A crop with the same name already exists.");
+        }
+
+        crop.IsDeleted = false;
+        crop.DeletedAtUtc = null;
+        await context.SaveChangesAsync(cancellationToken);
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(crop));
+    }
+
+    public async Task<IReadOnlyList<MasterDataItemDto>> GetDestinationsAsync(
+        bool includeDeleted = false,
+        CancellationToken cancellationToken = default)
+    {
+        var query = context.Destinations.AsNoTracking();
+
+        if (!includeDeleted)
+        {
+            query = query.Where(destination => !destination.IsDeleted);
+        }
+
+        return await query
             .AsNoTracking()
             .OrderBy(destination => destination.Name)
             .Select(destination => new MasterDataItemDto(
@@ -190,6 +259,8 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
                 destination.Name,
                 destination.Description,
                 destination.IsActive,
+                destination.IsDeleted,
+                destination.DeletedAtUtc,
                 destination.CreatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -200,7 +271,7 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
     {
         var name = request.Name.Trim();
         if (await context.Destinations.AnyAsync(
-                destination => destination.Name.ToUpper() == name.ToUpper(),
+                destination => !destination.IsDeleted && destination.Name.ToUpper() == name.ToUpper(),
                 cancellationToken))
         {
             return AdminOperationResult<MasterDataItemDto>.Conflict(
@@ -224,7 +295,9 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
         MasterDataRequest request,
         CancellationToken cancellationToken = default)
     {
-        var destination = await context.Destinations.FindAsync([id], cancellationToken);
+        var destination = await context.Destinations.FirstOrDefaultAsync(
+            item => item.Id == id && !item.IsDeleted,
+            cancellationToken);
         if (destination is null)
         {
             return AdminOperationResult<MasterDataItemDto>.NotFound("Destination was not found.");
@@ -232,7 +305,7 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
 
         var name = request.Name.Trim();
         if (await context.Destinations.AnyAsync(
-                item => item.Id != id && item.Name.ToUpper() == name.ToUpper(),
+                item => item.Id != id && !item.IsDeleted && item.Name.ToUpper() == name.ToUpper(),
                 cancellationToken))
         {
             return AdminOperationResult<MasterDataItemDto>.Conflict(
@@ -257,7 +330,58 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
             return AdminOperationResult<MasterDataItemDto>.NotFound("Destination was not found.");
         }
 
+        if (destination.IsDeleted)
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict("Restore the destination before changing its status.");
+        }
+
         destination.IsActive = isActive;
+        await context.SaveChangesAsync(cancellationToken);
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> DeleteDestinationAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var destination = await context.Destinations.FindAsync([id], cancellationToken);
+        if (destination is null)
+        {
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Destination was not found.");
+        }
+
+        if (!destination.IsDeleted)
+        {
+            destination.IsDeleted = true;
+            destination.DeletedAtUtc = DateTime.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
+    }
+
+    public async Task<AdminOperationResult<MasterDataItemDto>> RestoreDestinationAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var destination = await context.Destinations.FindAsync([id], cancellationToken);
+        if (destination is null)
+        {
+            return AdminOperationResult<MasterDataItemDto>.NotFound("Destination was not found.");
+        }
+
+        if (await context.Destinations.AnyAsync(
+                item => item.Id != id
+                    && !item.IsDeleted
+                    && item.Name.ToUpper() == destination.Name.ToUpper(),
+                cancellationToken))
+        {
+            return AdminOperationResult<MasterDataItemDto>.Conflict(
+                "A destination with the same name already exists.");
+        }
+
+        destination.IsDeleted = false;
+        destination.DeletedAtUtc = null;
         await context.SaveChangesAsync(cancellationToken);
         return AdminOperationResult<MasterDataItemDto>.Success(MapMasterData(destination));
     }
@@ -267,13 +391,15 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
     {
         return await context.Crops
             .AsNoTracking()
-            .Where(crop => crop.IsActive)
+            .Where(crop => crop.IsActive && !crop.IsDeleted)
             .OrderBy(crop => crop.Name)
             .Select(crop => new MasterDataItemDto(
                 crop.Id,
                 crop.Name,
                 crop.Description,
                 crop.IsActive,
+                crop.IsDeleted,
+                crop.DeletedAtUtc,
                 crop.CreatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -283,13 +409,15 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
     {
         return await context.Destinations
             .AsNoTracking()
-            .Where(destination => destination.IsActive)
+            .Where(destination => destination.IsActive && !destination.IsDeleted)
             .OrderBy(destination => destination.Name)
             .Select(destination => new MasterDataItemDto(
                 destination.Id,
                 destination.Name,
                 destination.Description,
                 destination.IsActive,
+                destination.IsDeleted,
+                destination.DeletedAtUtc,
                 destination.CreatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -307,7 +435,14 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
             farm.CreatedAt);
 
     private static MasterDataItemDto MapMasterData(Crop crop) =>
-        new(crop.Id, crop.Name, crop.Description, crop.IsActive, crop.CreatedAt);
+        new(
+            crop.Id,
+            crop.Name,
+            crop.Description,
+            crop.IsActive,
+            crop.IsDeleted,
+            crop.DeletedAtUtc,
+            crop.CreatedAt);
 
     private static MasterDataItemDto MapMasterData(Destination destination) =>
         new(
@@ -315,6 +450,8 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
             destination.Name,
             destination.Description,
             destination.IsActive,
+            destination.IsDeleted,
+            destination.DeletedAtUtc,
             destination.CreatedAt);
 
     private static string? NormalizeDescription(string? description) =>

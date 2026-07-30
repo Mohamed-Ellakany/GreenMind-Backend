@@ -109,6 +109,35 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
     }
 
     [Fact]
+    public async Task SoftDeletedMasterData_IsRejectedForNewExportPlans()
+    {
+        var deletedCropId = await AddDeletedCropAsync();
+        using var client = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/farm-owner/export-plans",
+            CreateRequest(cropId: deletedCropId));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var envelope = await response.Content.ReadFromJsonAsync<ApiResponse<JsonElement>>();
+        Assert.NotNull(envelope);
+        Assert.Contains("CropId", envelope.Error!.ValidationErrors!.Keys);
+    }
+
+    [Fact]
+    public async Task ExistingExportPlanStillShowsSoftDeletedCropAndDestinationNames()
+    {
+        var plan = await CreateExportPlanWithDeletedMasterDataAsync();
+        using var client = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+
+        var response = await client.GetAsync($"/api/farm-owner/export-plans/{plan.Id}");
+        var details = await ReadDataAsync<ExportPlanDetailsDto>(response);
+
+        Assert.Equal(plan.CropName, details.Crop);
+        Assert.Equal(plan.DestinationName, details.Destination);
+    }
+
+    [Fact]
     public async Task DifferentFarmOwner_CannotListOrViewAnotherOwnersExportPlan()
     {
         var otherPlanId = await CreateExportPlanAsync(GreenmindApiFactory.OtherFarmOwnerUserId);
@@ -135,6 +164,73 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         dbContext.Crops.Add(crop);
         await dbContext.SaveChangesAsync();
         return crop.Id;
+    }
+
+    private async Task<int> AddDeletedCropAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+        var crop = new Crop
+        {
+            Name = $"Deleted crop {Guid.NewGuid():N}",
+            IsActive = true,
+            IsDeleted = true,
+            DeletedAtUtc = DateTime.UtcNow
+        };
+
+        dbContext.Crops.Add(crop);
+        await dbContext.SaveChangesAsync();
+        return crop.Id;
+    }
+
+    private async Task<(int Id, string CropName, string DestinationName)> CreateExportPlanWithDeletedMasterDataAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+        var farm = await dbContext.Farms.SingleAsync(item => item.OwnerUserId == GreenmindApiFactory.FarmOwnerUserId);
+        var crop = new Crop
+        {
+            Name = $"Historical crop {Guid.NewGuid():N}",
+            IsActive = true
+        };
+        var destination = new Destination
+        {
+            Name = $"Historical destination {Guid.NewGuid():N}",
+            IsActive = true
+        };
+
+        dbContext.Crops.Add(crop);
+        dbContext.Destinations.Add(destination);
+        await dbContext.SaveChangesAsync();
+
+        var plantingDate = new DateOnly(2026, 1, 10);
+        var exportPlan = new ExportPlan
+        {
+            FarmId = farm.Id,
+            CropId = crop.Id,
+            DestinationId = destination.Id,
+            Name = $"Historical plan {Guid.NewGuid():N}",
+            Governorate = "Giza",
+            City = "6th of October",
+            Latitude = 29.9,
+            Longitude = 30.9,
+            AreaInFeddan = 5m,
+            PlantingDate = plantingDate,
+            ExpectedHarvestDate = plantingDate.AddDays(90),
+            ExpectedExportDate = plantingDate.AddDays(95),
+            Status = ExportPlanStatus.Planning
+        };
+
+        dbContext.ExportPlans.Add(exportPlan);
+        await dbContext.SaveChangesAsync();
+
+        crop.IsDeleted = true;
+        crop.DeletedAtUtc = DateTime.UtcNow;
+        destination.IsDeleted = true;
+        destination.DeletedAtUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        return (exportPlan.Id, crop.Name, destination.Name);
     }
 
     private async Task<int> CreateExportPlanAsync(string ownerUserId)

@@ -13,9 +13,10 @@ public sealed class AdminDestinationsController(IPlatformAdminService adminServi
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<MasterDataItemDto>>> GetAll(
+        [FromQuery] bool includeDeleted,
         CancellationToken cancellationToken)
     {
-        return Ok(await adminService.GetDestinationsAsync(cancellationToken));
+        return Ok(await adminService.GetDestinationsAsync(includeDeleted, cancellationToken));
     }
 
     [HttpPost]
@@ -48,6 +49,22 @@ public sealed class AdminDestinationsController(IPlatformAdminService adminServi
             id,
             request.IsActive!.Value,
             cancellationToken));
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<ActionResult<MasterDataItemDto>> Delete(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        return ToActionResult(await adminService.DeleteDestinationAsync(id, cancellationToken));
+    }
+
+    [HttpPost("{id:int}/restore")]
+    public async Task<ActionResult<MasterDataItemDto>> Restore(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        return ToActionResult(await adminService.RestoreDestinationAsync(id, cancellationToken));
     }
 
     private ActionResult<MasterDataItemDto> ToActionResult(AdminOperationResult<MasterDataItemDto> result) =>

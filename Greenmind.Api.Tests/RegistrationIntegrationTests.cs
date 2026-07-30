@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.DataProtection;
 using Greenmind.Application.Contracts.Api;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Greenmind.Domain.Consts;
 
 namespace Greenmind.Api.Tests;
 
@@ -70,5 +71,12 @@ public class RegistrationIntegrationTests : IClassFixture<WebApplicationFactory<
         var farm = await db.Farms.SingleOrDefaultAsync(f => f.OwnerUserId == user.Id);
         Assert.NotNull(farm);
         Assert.Equal(request.FarmName, farm!.Name);
+
+        var categories = await db.ExpenseCategories
+            .Where(category => category.FarmId == farm.Id)
+            .Select(category => category.Name)
+            .ToListAsync();
+        Assert.Equal(DefaultExpenseCategories.ArabicNames.Count, categories.Count);
+        Assert.All(DefaultExpenseCategories.ArabicNames, name => Assert.Contains(name, categories));
     }
 }

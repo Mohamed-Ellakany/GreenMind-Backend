@@ -5,6 +5,10 @@ using Greenmind.Api.Models;
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Greenmind.Application.Contracts.Api;
+using Greenmind.Domain.Consts;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Greenmind.Api.Controllers;
 
@@ -91,6 +95,15 @@ public class AuthController : ControllerBase
         await _unitOfWork.Farms.AddAsync(farm);
         await _unitOfWork.SaveChangesAsync();
 
+        _db.ExpenseCategories.AddRange(DefaultExpenseCategories.ArabicNames.Select(name =>
+            new ExpenseCategory
+            {
+                FarmId = farm.Id,
+                Name = name,
+                IsDefault = true
+            }));
+        await _unitOfWork.SaveChangesAsync();
+
         await tx.CommitAsync();
 
         var response = new RegisterResponse
@@ -112,18 +125,36 @@ public class AuthController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        if (!user.IsActive)
-            return Unauthorized(new { Message = "User account is not active." });
-
         var valid = await _userManager.CheckPasswordAsync(user, request.Password);
         if (!valid)
             return Unauthorized();
+
+        var farmApproval = await _db.Farms
+            .AsNoTracking()
+            .Where(farm => farm.OwnerUserId == user.Id)
+            .Select(farm => new { farm.IsApproved })
+            .SingleOrDefaultAsync();
+
+        if (farmApproval is { IsApproved: false })
+        {
+            return AccountStateUnauthorized(
+                ApiErrorCodes.AccountPendingApproval,
+                "Account is waiting for admin approval.");
+        }
+
+        if (!user.IsActive)
+        {
+            return AccountStateUnauthorized(
+                ApiErrorCodes.AccountInactive,
+                "User account is not active.");
+        }
 
         var roles = await _userManager.GetRolesAsync(user);
         var claims = new List<System.Security.Claims.Claim>
         {
             new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id),
             new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.UserName ?? string.Empty),
+            new System.Security.Claims.Claim("fullName", user.FullName),
             new System.Security.Claims.Claim("email", user.Email ?? string.Empty)
         };
 
@@ -133,19 +164,60 @@ public class AuthController : ControllerBase
                 claims.Add(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, r));
         }
 
-        var farmId = await _db.Farms
+        var farmInfo = await _db.Farms
             .AsNoTracking()
             .Where(farm => farm.OwnerUserId == user.Id)
-            .Select(farm => (int?)farm.Id)
+            .Select(farm => new { farm.Id, farm.Name })
             .SingleOrDefaultAsync();
 
-        if (farmId.HasValue)
+        if (farmInfo is not null)
         {
-            claims.Add(new System.Security.Claims.Claim("farmId", farmId.Value.ToString()));
+            claims.Add(new System.Security.Claims.Claim("farmId", farmInfo.Id.ToString()));
+            claims.Add(new System.Security.Claims.Claim("farmName", farmInfo.Name));
         }
 
         var token = _jwtService.CreateToken(claims);
 
         return Ok(new LoginResponse { Token = token, ExpiresAtUtc = DateTime.UtcNow.AddHours(1) });
     }
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized();
+
+        var account = await _db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new AccountProfileResponse(
+                user.FullName,
+                user.Email,
+                user.Farm == null ? null : user.Farm.Name,
+                user.Farm == null ? null : user.Farm.Id,
+                user.IsActive,
+                user.Farm == null ? null : user.Farm.IsApproved))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return account is null ? Unauthorized() : Ok(account);
+    }
+
+    private ObjectResult AccountStateUnauthorized(string code, string message) =>
+        StatusCode(
+            StatusCodes.Status401Unauthorized,
+            ApiResponseFactory.Failure<object?>(
+                StatusCodes.Status401Unauthorized,
+                code,
+                message,
+                HttpContext.TraceIdentifier));
 }
+
+public sealed record AccountProfileResponse(
+    string FullName,
+    string? Email,
+    string? FarmName,
+    int? FarmId,
+    bool IsActive,
+    bool? IsFarmApproved);

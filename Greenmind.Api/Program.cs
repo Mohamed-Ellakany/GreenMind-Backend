@@ -13,6 +13,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
+using Greenmind.Infrastructure.Storage;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -38,6 +41,14 @@ namespace Greenmind.Api
 
             // Add services to the container.
 
+            // Files under this root are private application data. The app intentionally
+            // does not enable static-file middleware; authorized controllers stream them.
+            builder.Services.Configure<PrivateFileStorageOptions>(options =>
+                options.RootPath = Path.Combine(
+                    builder.Environment.ContentRootPath,
+                    "wwwroot",
+                    "private"));
+
             builder.Services.AddControllers(options =>
             {
                 options.Filters.Add<ModelStateValidationFilter>();
@@ -48,6 +59,7 @@ namespace Greenmind.Api
             builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(opts =>
             {
                 opts.JsonSerializerOptions.Converters.Add(new Greenmind.Api.Json.DateOnlyConverter());
+                opts.JsonSerializerOptions.Converters.Add(new Greenmind.Api.Json.ArabicBusinessEnumJsonConverterFactory());
                 opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
 
@@ -125,6 +137,47 @@ namespace Greenmind.Api
             // Simple role-based authorization
             builder.Services.AddAuthorization();
 
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy("ai-chat", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+                options.AddPolicy("ai-analysis", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 20,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+                options.AddPolicy("private-files", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 120,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+            });
+
             builder.Services.AddFarmPlanningKernel(builder.Configuration);
 
             builder.Services.AddSwaggerGen(options =>
@@ -137,6 +190,11 @@ namespace Greenmind.Api
             {
                 builder.Services.AddHostedService<Greenmind.Api.HostedServices.InitialExportPlanPlanningService>();
                 builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+            }
+
+            if (!builder.Environment.IsEnvironment("Testing"))
+            {
+                builder.Services.AddHostedService<Greenmind.Api.HostedServices.DiseaseAnalysisBackgroundService>();
             }
 
             var app = builder.Build();
@@ -171,6 +229,8 @@ namespace Greenmind.Api
             app.UseMiddleware<AuthorizationFailureLoggingMiddleware>();
 
             app.UseAuthorization();
+
+            app.UseRateLimiter();
 
 
             app.MapControllers();

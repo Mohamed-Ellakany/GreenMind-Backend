@@ -39,5 +39,7 @@ namespace Greenmind.Domain.Entities
         // Navigation
         public ExportPlan ExportPlan { get; set; } = null!;
         public TaskType TaskType { get; set; } = null!;
+        public ICollection<TaskChangeProposalItem> ProposalItems { get; set; } = new List<TaskChangeProposalItem>();
+        public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
     }
 }

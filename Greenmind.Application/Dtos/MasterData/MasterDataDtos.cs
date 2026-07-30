@@ -7,6 +7,8 @@ public sealed record MasterDataItemDto(
     string Name,
     string? Description,
     bool IsActive,
+    bool IsDeleted,
+    DateTime? DeletedAtUtc,
     DateTime CreatedAt);
 
 public sealed class MasterDataRequest

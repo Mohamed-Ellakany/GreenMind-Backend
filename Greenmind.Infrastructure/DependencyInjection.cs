@@ -14,6 +14,20 @@ using Microsoft.Extensions.DependencyInjection;
 using Greenmind.Infrastructure.Services;
 using Greenmind.Application.Contracts.Planning;
 using Greenmind.Infrastructure.Planning;
+using Greenmind.Application.Contracts.Regulatory;
+using Greenmind.Infrastructure.Regulatory;
+using Greenmind.Application.Contracts.Chat;
+using Greenmind.Application.Interfaces.AI;
+using Greenmind.Infrastructure.Agents;
+using Greenmind.Infrastructure.Chat;
+using Greenmind.Application.Contracts.TaskProposals;
+using Greenmind.Infrastructure.TaskProposals;
+using Greenmind.Application.Contracts.Costs;
+using Greenmind.Infrastructure.Costs;
+using Greenmind.Application.Contracts.Storage;
+using Greenmind.Infrastructure.Storage;
+using Greenmind.Application.Contracts.Disease;
+using Greenmind.Infrastructure.Disease;
 
 namespace Greenmind.Infrastructure;
 
@@ -28,7 +42,7 @@ public static class DependencyInjection
         services.AddScoped<IExportPlanRepository, ExportPlanRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<ITaskTypeRepository, TaskTypeRepository>();
-        services.AddScoped<ISoilMeasurementRepository, SoilMeasurementRepository>();
+        services.AddScoped<Greenmind.Application.Contracts.Persistence.ISoilMeasurementRepository, SoilMeasurementRepository>();
         services.AddScoped<Greenmind.Application.Services.IFuturePlannedDaysCalculationService, FuturePlannedDaysCalculationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPlatformAdminService, PlatformAdminService>();
@@ -42,6 +56,17 @@ public static class DependencyInjection
         services.AddScoped<IExportPlanPlanningService, ExportPlanPlanningService>();
         services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IRegulatoryDataImportService, RegulatoryDataImportService>();
+        services.AddScoped<IRegulatoryKnowledgeQueryService, RegulatoryKnowledgeQueryService>();
+        services.AddScoped<IConversationAiService, ConversationAiService>();
+        services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<ITaskChangeProposalService, TaskChangeProposalService>();
+        services.AddSingleton<IPlanTaskProposalGenerator, PlanTaskProposalGenerator>();
+        services.AddScoped<ICostManagementService, CostManagementService>();
+        services.AddScoped<IExpenseAttachmentService, ExpenseAttachmentService>();
+        services.AddSingleton<IPrivateFileStorage, ServerPrivateFileStorage>();
+        services.AddScoped<IDiseaseReportService, DiseaseReportService>();
+        services.AddSingleton<IDiseaseVisionAnalyzer, DiseaseVisionAnalyzer>();
 
         return services;
     }

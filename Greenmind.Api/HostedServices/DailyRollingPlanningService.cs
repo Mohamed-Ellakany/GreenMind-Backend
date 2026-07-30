@@ -33,6 +33,16 @@ public class DailyRollingPlanningService : BackgroundService
             {
                 await RunOnceAsync(stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (ObjectDisposedException) when (stoppingToken.IsCancellationRequested)
+            {
+                // The host can dispose its service provider when startup fails
+                // before this worker observes cancellation.
+                break;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unhandled error in DailyRollingPlanningService.");
@@ -42,7 +52,7 @@ public class DailyRollingPlanningService : BackgroundService
             {
                 await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 // shutting down
                 break;

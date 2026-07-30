@@ -12,6 +12,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Greenmind.Application.Interfaces.AI;
+using Greenmind.Application.Contracts.Disease;
+using Greenmind.Application.Dtos.Disease;
+using Greenmind.Domain.Consts.Enums;
+using Greenmind.Infrastructure.Storage;
+using Greenmind.Infrastructure.Rag;
 
 namespace Greenmind.Application.Tests.Integration;
 
@@ -23,6 +29,10 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
     public const string AuthenticationScheme = "IntegrationTest";
 
     private readonly string _databaseName = $"greenmind-tests-{Guid.NewGuid():N}";
+    public string PrivateStorageRoot { get; } = Path.Combine(
+        Path.GetTempPath(),
+        "greenmind-integration-tests",
+        Guid.NewGuid().ToString("N"));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -38,6 +48,16 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
                 options.UseInMemoryDatabase(_databaseName));
 
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            services.Configure<PrivateFileStorageOptions>(options =>
+                options.RootPath = PrivateStorageRoot);
+            services.RemoveAll<IConversationAiService>();
+            services.AddSingleton<IConversationAiService, StubConversationAiService>();
+            services.RemoveAll<IComplianceIngestionService>();
+            services.AddSingleton<IComplianceIngestionService, StubComplianceIngestionService>();
+            services.RemoveAll<IPlanTaskProposalGenerator>();
+            services.AddSingleton<IPlanTaskProposalGenerator, StubPlanTaskProposalGenerator>();
+            services.RemoveAll<IDiseaseVisionAnalyzer>();
+            services.AddSingleton<IDiseaseVisionAnalyzer, StubDiseaseVisionAnalyzer>();
 
             services.AddAuthentication(options =>
                 {
@@ -107,8 +127,71 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
     Task IAsyncLifetime.DisposeAsync()
     {
         Dispose();
+        if (Directory.Exists(PrivateStorageRoot))
+            Directory.Delete(PrivateStorageRoot, recursive: true);
         return Task.CompletedTask;
     }
+}
+
+internal sealed class StubDiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
+{
+    public Task<DiseaseVisionResult> AnalyzeAsync(
+        DiseaseVisionRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new DiseaseVisionResult(
+            "اشتباه إصابة فطرية",
+            55m,
+            DiseaseSeverity.Medium,
+            "بقع ظاهرة على الأوراق",
+            "اعزل الأجزاء المتأثرة وراقب تطور الأعراض",
+            "قد يتأثر توقيت التصدير إذا انتشرت الأعراض",
+            "النتيجة استشارية وليست تشخيصًا معمليًا.",
+            "integration-vision",
+            "test-v1"));
+}
+
+internal sealed class StubPlanTaskProposalGenerator : IPlanTaskProposalGenerator
+{
+    public Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
+        string userRequest,
+        string planContextJson,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<GeneratedTaskChangeItem>>([]);
+}
+
+internal sealed class StubConversationAiService : IConversationAiService
+{
+    public async IAsyncEnumerable<string> StreamReplyAsync(
+        ConversationAiRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return "إجابة ";
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return "آمنة";
+    }
+}
+
+internal sealed class StubComplianceIngestionService : IComplianceIngestionService
+{
+    public Task<int> IngestFfvStandardAsync(
+        Stream pdfStream,
+        string crop,
+        string sourceName,
+        CancellationToken ct = default) => Task.FromResult(7);
+
+    public Task<int> IngestEuRegulationBodyAsync(
+        Stream pdfStream,
+        string sourceName,
+        CancellationToken ct = default) => Task.FromResult(11);
+
+    public Task<int> IngestEuRegulationAnnexForCropAsync(
+        Stream pdfStream,
+        string sourceName,
+        string annexLabelHint,
+        string[] cropKeywords,
+        CancellationToken ct = default) => Task.FromResult(3);
 }
 
 internal sealed class IntegrationTestAuthHandler(
