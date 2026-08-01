@@ -2,16 +2,12 @@
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Infrastructure.Agents.Plugins;
 using Greenmind.Infrastructure.Agents.Prompts;
+using Greenmind.Infrastructure.Iti;
 using Greenmind.Infrastructure.Persistence;
 using Greenmind.Infrastructure.Persistence.Repositories;
 using Greenmind.Infrastructure.Rag;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.SemanticKernel;
-using OpenAI;
-using OpenAI.Embeddings;
-using System.ClientModel;
 
 namespace Greenmind.Infrastructure.Agents;
 
@@ -21,7 +17,7 @@ public static class KernelSetup
     {
         services.AddHttpClient<IWeatherHttpClient, WeatherHttpClient>(c =>
         {
-            c.BaseAddress = new Uri(config["Weather:BaseUrl"]!);
+            c.BaseAddress = CreateWeatherBaseAddress(config["Weather:BaseUrl"]);
             c.DefaultRequestHeaders.Add("x-api-key", config["Weather:ApiKey"]);
         });
 
@@ -38,29 +34,10 @@ public static class KernelSetup
         services.AddScoped<IFarmTaskPersistenceService, FarmTaskPersistenceService>();
         services.AddScoped<FarmPlanningPromptBuilder>();
 
-        // --- NEW: RAG registrations ---------------------------------------------------
-        // IMPORTANT: this is registered on the app's OWN service collection, NOT inside the
-        // Kernel.CreateBuilder() factory below. Kernel.CreateBuilder() creates a completely
-        // separate, isolated internal service container - anything registered only on
-        // "builder.Services"/"builder.AddXyz(...)" inside that factory is invisible to the
-        // rest of the app's DI container. Since ComplianceIngestionService and
-        // ComplianceRagPlugin are resolved from the APP's container (via AddScoped below,
-        // and via sp.GetRequiredService<ComplianceRagPlugin>() inside the Kernel factory),
-        // the embedding generator must be registered here, at the app level, instead.
-        //
-        // AsIEmbeddingGenerator() is a stable (non-experimental) extension from the
-        // Microsoft.Extensions.AI.OpenAI package - no SKEXP pragma needed here.
-        services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ =>
+        services.AddHttpClient<IItiBedrockGatewayClient, ItiBedrockGatewayClient>(client =>
         {
-            var endpoint = new Uri(config["OpenAI:Endpoint"] ?? "https://models.github.ai/inference");
-            var openAiClient = new OpenAIClient(
-                new ApiKeyCredential(config["OpenAI:ApiKey"]!),
-                new OpenAIClientOptions { Endpoint = endpoint });
-
-            var embeddingClient = openAiClient.GetEmbeddingClient(
-                config["Embeddings:Model"] ?? "openai/text-embedding-3-small");
-
-            return embeddingClient.AsIEmbeddingGenerator();
+            client.BaseAddress = CreateItiBaseAddress(config["iti:BaseUrl"]);
+            client.Timeout = TimeSpan.FromSeconds(120);
         });
 
         services.AddScoped<IComplianceDocumentRepository, ComplianceDocumentRepository>();
@@ -74,32 +51,31 @@ public static class KernelSetup
         services.AddScoped<RegulatoryDataPlugin>();
 
         services.AddScoped<IAgentPlanningService, AgentPlanningService>();
+    }
 
-
-        services.AddScoped<Kernel>(sp =>
+    public static Uri CreateWeatherBaseAddress(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
         {
-            var builder = Kernel.CreateBuilder();
+            throw new InvalidOperationException("Weather:BaseUrl must be configured.");
+        }
 
-            builder.AddOpenAIChatCompletion(
-                modelId: config["OpenAI:Model"] ?? "openai/gpt-4.1-mini",
-                apiKey: config["OpenAI:ApiKey"]!,
-                endpoint: new Uri(config["OpenAI:Endpoint"] ?? "https://models.github.ai/inference"));
+        var normalized = baseUrl.EndsWith("/", StringComparison.Ordinal)
+            ? baseUrl
+            : $"{baseUrl}/";
 
-            builder.Plugins.AddFromObject(sp.GetRequiredService<WeatherPlugin>(), "Weather");
-            builder.Plugins.AddFromObject(sp.GetRequiredService<SoilPlugin>(), "Soil");
-            builder.Plugins.AddFromObject(sp.GetRequiredService<TaskHistoryPlugin>(), "TaskHistory");
-            builder.Plugins.AddFromObject(sp.GetRequiredService<RegulatoryDataPlugin>(), "RegulatoryData");
+        return new Uri(normalized, UriKind.Absolute);
+    }
 
-            // --- NEW: register the RAG plugin so the agent can call it ------------------
-            // ComplianceRagPlugin was resolved from the app's own container (sp), so its
-            // constructor dependency on IEmbeddingGenerator<...> above was already satisfied
-            // there - nothing extra needed on "builder" for this to work.
-            builder.Plugins.AddFromObject(sp.GetRequiredService<ComplianceRagPlugin>(), "ComplianceRag");
-            // ---------------------------------------------------------------------------------
+    public static Uri CreateItiBaseAddress(string? baseUrl)
+    {
+        var value = string.IsNullOrWhiteSpace(baseUrl)
+            ? "https://apiaccess.iti.net.eg/api/v1/"
+            : baseUrl;
+        var normalized = value.EndsWith("/", StringComparison.Ordinal)
+            ? value
+            : $"{value}/";
 
-            var kernel = builder.Build();
-
-            return kernel;
-        });
+        return new Uri(normalized, UriKind.Absolute);
     }
 }

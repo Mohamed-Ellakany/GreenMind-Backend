@@ -8,6 +8,7 @@ using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Greenmind.Infrastructure.Chat;
 
@@ -16,7 +17,8 @@ public sealed class ChatService(
     IConversationAiService conversationAiService,
     IPlanTaskProposalGenerator proposalGenerator,
     ITaskChangeProposalService proposalService,
-    TimeProvider timeProvider) : IChatService
+    TimeProvider timeProvider,
+    ILogger<ChatService> logger) : IChatService
 {
     private static readonly JsonSerializerOptions ContextJsonOptions =
         new(JsonSerializerDefaults.Web);
@@ -353,9 +355,14 @@ public sealed class ChatService(
                     CancellationToken.None);
                 taskChangeProposalId = proposalResult.Value?.Id;
             }
-            catch
+            catch (Exception exception)
             {
                 // Proposal generation is optional; a safe chat answer remains valid.
+                logger.LogWarning(
+                    exception,
+                    "Task-change proposal generation failed for chat session {ChatSessionId} and assistant message {AssistantMessageId}.",
+                    session.Id,
+                    assistantMessage!.Id);
             }
         }
 
@@ -365,9 +372,13 @@ public sealed class ChatService(
             {
                 await UpdateConversationSummaryAsync(session, CancellationToken.None);
             }
-            catch
+            catch (Exception exception)
             {
                 // Summarization is an optimization and must never invalidate a reply.
+                logger.LogWarning(
+                    exception,
+                    "Conversation summarization failed for chat session {ChatSessionId}.",
+                    session.Id);
             }
         }
 
@@ -380,6 +391,24 @@ public sealed class ChatService(
                 Content: assistantMessage.Content,
                 TaskChangeProposalId: taskChangeProposalId);
             yield break;
+        }
+
+        if (failure is OperationCanceledException)
+        {
+            logger.LogInformation(
+                "AI chat request was cancelled for session {ChatSessionId}, scope {ChatScope}, user message {UserMessageId}.",
+                session.Id,
+                aiRequest.Scope,
+                userMessageId);
+        }
+        else
+        {
+            logger.LogError(
+                failure,
+                "AI chat reply failed for session {ChatSessionId}, scope {ChatScope}, user message {UserMessageId}.",
+                session.Id,
+                aiRequest.Scope,
+                userMessageId);
         }
 
         var failedMessage = await PersistFailedReplyAsync(session, userMessageId);

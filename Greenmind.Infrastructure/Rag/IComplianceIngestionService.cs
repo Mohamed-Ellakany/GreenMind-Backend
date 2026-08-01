@@ -1,8 +1,8 @@
 ﻿using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Application.Dtos.AI;
 using Greenmind.Domain.Entities;
+using Greenmind.Infrastructure.Iti;
 using Greenmind.Infrastructure.Rag.Chunkers;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace Greenmind.Infrastructure.Rag
@@ -21,18 +21,18 @@ namespace Greenmind.Infrastructure.Rag
     {
         private readonly IComplianceDocumentRepository _repo;
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
+        private readonly IItiBedrockGatewayClient _gatewayClient;
         private readonly ILogger<ComplianceIngestionService> _logger;
 
         public ComplianceIngestionService(
             IComplianceDocumentRepository repo,
             IUnitOfWork unitOfWork,
-            IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
+            IItiBedrockGatewayClient gatewayClient,
             ILogger<ComplianceIngestionService> logger)
         {
             _repo = repo;
             _unitOfWork = unitOfWork;
-            _embeddingGenerator = embeddingGenerator;
+            _gatewayClient = gatewayClient;
             _logger = logger;
         }
 
@@ -72,8 +72,10 @@ namespace Greenmind.Infrastructure.Rag
 
             // Batch embedding call - most embedding APIs accept a list of inputs in one request,
             // which is much cheaper/faster than one call per chunk.
-            GeneratedEmbeddings<Embedding<float>> embeddings = await _embeddingGenerator.GenerateAsync(
-                chunks.Select(c => c.Content).ToList(), cancellationToken: ct);
+            var embeddings = await _gatewayClient.EmbedAsync(
+                chunks.Select(c => c.Content).ToList(),
+                "search_document",
+                ct);
 
             var entities = new List<ComplianceDocument>(chunks.Count);
 
@@ -88,7 +90,7 @@ namespace Greenmind.Infrastructure.Rag
                     SourceName = chunk.SourceName,
                     SectionReference = chunk.SectionReference,
                     Content = chunk.Content,
-                    Embedding = EmbeddingSerializer.Serialize(embeddings[i].Vector)
+                    Embedding = EmbeddingSerializer.Serialize(embeddings[i])
                 });
             }
 

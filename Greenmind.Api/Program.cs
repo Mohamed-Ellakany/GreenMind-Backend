@@ -16,6 +16,8 @@ using System.Text.Json.Serialization;
 using Greenmind.Infrastructure.Storage;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using Serilog;
+using Serilog.Sinks.MSSqlServer;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -25,7 +27,6 @@ namespace Greenmind.Api
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
 
             builder.Services.AddCors(options =>
             {
@@ -75,6 +76,39 @@ namespace Greenmind.Api
                 useInMemory = inMem;
             }
 
+            var onlineConnectionString = builder.Configuration.GetConnectionString("online");
+            var databaseConnectionString = string.IsNullOrWhiteSpace(onlineConnectionString)
+                ? builder.Configuration.GetConnectionString("DefaultConnection")
+                : onlineConnectionString;
+
+            builder.Services.AddSerilog((services, loggerConfiguration) =>
+            {
+                loggerConfiguration
+                    .ReadFrom.Configuration(builder.Configuration)
+                    .ReadFrom.Services(services)
+                    .Enrich.FromLogContext()
+                    .WriteTo.Console();
+
+                if (!useInMemory &&
+                    !builder.Environment.IsEnvironment("Testing") &&
+                    !string.IsNullOrWhiteSpace(databaseConnectionString))
+                {
+                    var columnOptions = new ColumnOptions();
+                    columnOptions.Store.Remove(StandardColumn.Properties);
+                    columnOptions.Store.Add(StandardColumn.LogEvent);
+                    columnOptions.TimeStamp.ConvertToUtc = true;
+
+                    loggerConfiguration.WriteTo.MSSqlServer(
+                        connectionString: databaseConnectionString,
+                        sinkOptions: new MSSqlServerSinkOptions
+                        {
+                            TableName = "Logs",
+                            AutoCreateSqlTable = false
+                        },
+                        columnOptions: columnOptions);
+                }
+            });
+
             if (useInMemory)
             {
                 // Use InMemory provider for tests or local scenarios
@@ -84,8 +118,14 @@ namespace Greenmind.Api
             }
             else
             {
+                if (string.IsNullOrWhiteSpace(databaseConnectionString))
+                {
+                    throw new InvalidOperationException(
+                        "Configure ConnectionStrings:online or ConnectionStrings:DefaultConnection.");
+                }
+
                 builder.Services.AddDbContext<GreenmindDbContext>(options =>
-                    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+                    options.UseSqlServer(databaseConnectionString));
 
                 builder.Services.AddInfrastructureServices();
             }
@@ -216,6 +256,8 @@ namespace Greenmind.Api
 			// Configure the HTTP request pipeline.
 
             app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
+            app.UseSerilogRequestLogging();
 
             app.UseSwagger();
             app.UseSwaggerUI();

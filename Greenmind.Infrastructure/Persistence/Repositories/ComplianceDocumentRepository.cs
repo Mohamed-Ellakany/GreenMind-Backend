@@ -36,9 +36,17 @@ namespace Greenmind.Infrastructure.Persistence.Repositories
             // Brute-force ranking in memory. Fine for hundreds-to-low-thousands of chunks
             // (a single-crop project like Strawberry-only will likely stay well under that).
             var ranked = candidates
-                .Select(doc => new ComplianceSearchResult(
-                    doc,
-                    VectorMath.CosineSimilarity(queryEmbedding, EmbeddingSerializer.Deserialize(doc.Embedding))))
+                .Select(doc => new
+                {
+                    Document = doc,
+                    Embedding = EmbeddingSerializer.Deserialize(doc.Embedding)
+                })
+                // Embeddings created by the retired GitHub model have a different
+                // dimension. Ignore them until the source document is re-ingested.
+                .Where(item => item.Embedding.Length == queryEmbedding.Length)
+                .Select(item => new ComplianceSearchResult(
+                    item.Document,
+                    VectorMath.CosineSimilarity(queryEmbedding, item.Embedding)))
                 .OrderByDescending(r => r.Score)
                 .Take(topK)
                 .ToList();

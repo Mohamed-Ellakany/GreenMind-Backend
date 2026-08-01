@@ -3,35 +3,23 @@ using System.Text.Json.Serialization;
 using Greenmind.Application.Dtos.TaskProposals;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts.Enums;
-using Microsoft.Extensions.Configuration;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Greenmind.Infrastructure.Iti;
 
 namespace Greenmind.Infrastructure.TaskProposals;
 
 public sealed class PlanTaskProposalGenerator : IPlanTaskProposalGenerator
 {
-    private readonly IChatCompletionService _chatCompletion;
+    private readonly IItiBedrockGatewayClient _gatewayClient;
 
-    public PlanTaskProposalGenerator(IConfiguration configuration)
-    {
-        var builder = Kernel.CreateBuilder();
-        builder.AddOpenAIChatCompletion(
-            modelId: configuration["TaskProposals:Model"] ?? "openai/gpt-4.1-mini",
-            apiKey: configuration["OpenAI:ApiKey"] ?? string.Empty,
-            endpoint: new Uri(
-                configuration["OpenAI:Endpoint"] ?? "https://models.github.ai/inference"));
-        _chatCompletion = builder.Build()
-            .GetRequiredService<IChatCompletionService>();
-    }
+    public PlanTaskProposalGenerator(IItiBedrockGatewayClient gatewayClient) =>
+        _gatewayClient = gatewayClient;
 
     public async Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
         string userRequest,
         string planContextJson,
         CancellationToken cancellationToken = default)
     {
-        var history = new ChatHistory(
+        var systemPrompt =
             """
             أنت محلل طلبات تشغيلية لخطة تصدير زراعية. لا تنفذ أي تغيير.
             أنشئ اقتراحًا فقط إذا طلب المستخدم بوضوح إضافة مهمة أو تعديل مهمة أو إلغاء مهمة.
@@ -41,26 +29,22 @@ public sealed class PlanTaskProposalGenerator : IPlanTaskProposalGenerator
             operation يجب أن تكون add أو modify أو cancel.
             في cancel كرر القيم الحالية داخل proposedValues.
             reason يجب أن يكون عربيًا وموجزًا. أعد JSON فقط.
-            """);
-        history.AddUserMessage($"""
+            """;
+        var userPrompt = $"""
             طلب المستخدم:
             {userRequest}
 
             سياق الخطة:
             {planContextJson}
-            """);
+            """;
 
-        var response = await _chatCompletion.GetChatMessageContentAsync(
-            history,
-            new OpenAIPromptExecutionSettings
-            {
-                FunctionChoiceBehavior = FunctionChoiceBehavior.None(),
-                Temperature = 0,
-                ResponseFormat = typeof(ProposalPayload)
-            },
+        var response = await _gatewayClient.ChatAsync(
+            systemPrompt,
+            [new ItiChatMessage("user", userPrompt)],
+            maxTokens: 1600,
             cancellationToken: cancellationToken);
         var payload = JsonSerializer.Deserialize<ProposalPayload>(
-            response.Content ?? string.Empty,
+            ItiJson.ExtractObject(response),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         if (payload is null || !payload.HasProposal || payload.Items.Count == 0)
             return [];
