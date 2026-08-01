@@ -1,9 +1,8 @@
 ﻿using Greenmind.Application.Dtos.AI;
 using Greenmind.Application.Interfaces.AI;
+using Greenmind.Infrastructure.Agents.Plugins;
 using Greenmind.Infrastructure.Agents.Prompts;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Greenmind.Infrastructure.Iti;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -11,14 +10,17 @@ namespace Greenmind.Infrastructure.Agents
 {
     public class AgentPlanningService : IAgentPlanningService
     {
-        private readonly Kernel _kernel;
+        private readonly IItiBedrockGatewayClient _gatewayClient;
+        private readonly ComplianceRagPlugin _complianceRag;
         private readonly FarmPlanningPromptBuilder _promptBuilder;
 
         public AgentPlanningService(
-            Kernel kernel,
+            IItiBedrockGatewayClient gatewayClient,
+            ComplianceRagPlugin complianceRag,
             FarmPlanningPromptBuilder promptBuilder)
         {
-            _kernel = kernel;
+            _gatewayClient = gatewayClient;
+            _complianceRag = complianceRag;
             _promptBuilder = promptBuilder;
         }
 
@@ -26,24 +28,15 @@ namespace Greenmind.Infrastructure.Agents
         {
             var systemPrompt = _promptBuilder.BuildSystemPrompt(request);   
             var userPrompt = _promptBuilder.BuildUserPrompt(request);
+            var complianceContext = await BuildComplianceContextAsync(request);
+            var json = await _gatewayClient.ChatAsync(
+                systemPrompt,
+                [new ItiChatMessage(
+                    "user",
+                    $"{userPrompt}\n\nAuthoritative compliance search results:\n{complianceContext}")],
+                maxTokens: 3000);
 
-            var executionSettings = new OpenAIPromptExecutionSettings
-            {
-                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
-                Temperature = 0.2,
-                ResponseFormat = "json_object"
-            };
-
-            var history = new ChatHistory();
-            history.AddSystemMessage(systemPrompt);
-            history.AddUserMessage(userPrompt);
-
-            var chatService = _kernel.GetRequiredService<IChatCompletionService>();
-            var result = await chatService.GetChatMessageContentAsync(history, executionSettings, _kernel);
-
-            var json = result.Content ?? throw new InvalidOperationException("Empty model response");
-
-            var response = JsonSerializer.Deserialize<AgentResponse>(json, new JsonSerializerOptions
+            var response = JsonSerializer.Deserialize<AgentResponse>(ItiJson.ExtractObject(json), new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
                 NumberHandling = JsonNumberHandling.AllowReadingFromString,
@@ -56,6 +49,19 @@ namespace Greenmind.Infrastructure.Agents
                 .ToList();
 
             return response;
+        }
+
+        private async Task<string> BuildComplianceContextAsync(AgentRequest request)
+        {
+            var crop = request.ExportPlan.Crop;
+            var quality = await _complianceRag.SearchQualityGradingAsync(
+                $"quality grading sizing packaging requirements for {crop}", crop);
+            var phytosanitary = await _complianceRag.SearchPhytosanitaryAsync(
+                $"phytosanitary export requirements for {crop} entering {request.ExportPlan.Destination}", crop);
+            var pesticide = await _complianceRag.SearchPesticideResidueAsync(
+                $"pesticide residue limits and pre-harvest intervals for {crop}", crop);
+
+            return $"Quality/grading:\n{quality}\nPhytosanitary:\n{phytosanitary}\nPesticide residue:\n{pesticide}";
         }
     }
 }

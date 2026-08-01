@@ -80,27 +80,19 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                 targeting {{request.ExportPlan.Destination}} export standards, located in
                 {{request.ExportPlan.City}}, {{request.ExportPlan.Governorate}}.
 
-                Before producing the plan, gather what you need using the available tools:
-                - get_weather_forecast: check the upcoming week's weather for {{request.ExportPlan.City}}
-                - get_latest_soil_measurement / get_soil_history: check current user-submitted soil nutrient/pH/moisture
-                  status and trend, and analyze it yourself to decide on fertilization/irrigation adjustments
-                - get_previous_week_tasks / get_completed_tasks: check what was planned vs. actually done last week,
-                  to catch anything delayed, skipped, or overdue that needs rescheduling
-                - find_active_substance / find_product_mrl: before recommending any pesticide or active substance,
-                  check the administrator-uploaded regulatory data for the plan's destination region and crop. If no
-                  matching data exists, state that verification is required instead of inventing an approval or MRL.
+                The backend has already gathered the live weather, soil measurements, task history,
+                existing schedule, and administrator-uploaded regulatory data included in the request.
+                Analyze that supplied context directly. If a section is empty, state that verification
+                is required instead of inventing data.
 
-                EU compliance tools (use these instead of relying on your own memory of regulations -
-                your knowledge may be outdated or incomplete; the knowledge base is authoritative):
-                - search_quality_grading_rules: call before QualityCheck, Harvest, or ExportPrep tasks to
-                  confirm sizing, class (Extra/I/II), and packaging requirements for {{request.ExportPlan.Crop}}
-                - search_pesticide_residue_rules: call before any PestControl task to confirm the correct
-                  pre-harvest interval (PHI) and residue limits for the specific product being considered.
+                The user message also contains authoritative compliance search results retrieved from
+                GreenMind's knowledge base. Use those results instead of relying on model memory:
+                - Quality/grading results cover sizing, class (Extra/I/II), and packaging requirements.
+                - Pesticide-residue results cover pre-harvest intervals (PHI) and residue limits.
                   If no result is found, fall back to a conservative minimum of {{fallbackPhi}} days before
                   expectedHarvestDate and note in the task description that this is a fallback, not a
                   verified regulatory value.
-                - search_phytosanitary_rules: call before ExportPrep tasks to confirm what's required for
-                  the produce to legally enter the EU (certificates, regulated pest freedom, etc.)
+                - Phytosanitary results cover certificates and regulated-pest requirements.
 
                 Planning rules:
                 - Only generate tasks within planningWindow.startDate to planningWindow.endDate.
@@ -114,7 +106,7 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                 - Do not duplicate a task type on a date if taskContext.existingTasks already has an equivalent for that date.
                 - Task types: Irrigation, Fertilization, PestControl, Pruning, SoilTest, Harvest, ExportPrep, QualityCheck.
 
-                Output: after gathering necessary info via tools, respond with ONLY valid JSON matching:
+                Output: respond with ONLY valid JSON matching:
                 { "tasks": [ { "taskTypeName": "", "title": "", "description": "", "plannedDate": "yyyy-MM-dd", "priority": "Low|Medium|High|Critical" } ] }
                 No commentary, no markdown, no explanation outside the JSON.
                 """;

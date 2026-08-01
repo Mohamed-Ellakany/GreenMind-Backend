@@ -2,7 +2,7 @@
 using System.Text;
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Domain.Consts.Enums;
-using Microsoft.Extensions.AI;
+using Greenmind.Infrastructure.Iti;
 using Microsoft.SemanticKernel;
 
 namespace Greenmind.Infrastructure.Agents.Plugins
@@ -10,12 +10,12 @@ namespace Greenmind.Infrastructure.Agents.Plugins
     public class ComplianceRagPlugin
     {
         private readonly IComplianceDocumentRepository _repo;
-        private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
+        private readonly IItiBedrockGatewayClient _gatewayClient;
 
-        public ComplianceRagPlugin(IComplianceDocumentRepository repo, IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator)
+        public ComplianceRagPlugin(IComplianceDocumentRepository repo, IItiBedrockGatewayClient gatewayClient)
         {
             _repo = repo;
-            _embeddingGenerator = embeddingGenerator;
+            _gatewayClient = gatewayClient;
         }
 
         [KernelFunction("search_quality_grading_rules")]
@@ -56,12 +56,12 @@ namespace Greenmind.Infrastructure.Agents.Plugins
 
         private async Task<string> SearchAsync(string query, ComplianceCategory category, string? crop, string? destination)
         {
-            // GenerateVectorAsync is the Microsoft.Extensions.AI convenience method for a single
-            // input - returns the raw ReadOnlyMemory<float> vector directly, no wrapper to unwrap.
-            var queryEmbedding = await _embeddingGenerator.GenerateVectorAsync(query);
+            var queryEmbedding = (await _gatewayClient.EmbedAsync(
+                [query],
+                "search_query"))[0];
 
             var results = await _repo.SearchAsync(
-                queryEmbedding.ToArray(),
+                queryEmbedding,
                 category: category,
                 crop: crop,
                 destination: destination,

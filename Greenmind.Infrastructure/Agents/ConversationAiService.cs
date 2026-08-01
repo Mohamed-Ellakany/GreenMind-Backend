@@ -3,15 +3,17 @@ using System.Text.Json;
 using Greenmind.Application.Contracts.Regulatory;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts.Enums;
+using Greenmind.Infrastructure.Agents.Plugins;
+using Greenmind.Infrastructure.Iti;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace Greenmind.Infrastructure.Agents;
 
 public sealed class ConversationAiService(
-    Kernel kernel,
-    IRegulatoryKnowledgeQueryService regulatoryQueryService) : IConversationAiService
+    IItiBedrockGatewayClient gatewayClient,
+    IRegulatoryKnowledgeQueryService regulatoryQueryService,
+    ComplianceRagPlugin? complianceRag = null) : IConversationAiService
 {
     public async IAsyncEnumerable<string> StreamReplyAsync(
         ConversationAiRequest request,
@@ -51,36 +53,31 @@ public sealed class ConversationAiService(
             "ولا يجوز تفسيرها على أنها سؤال شخصي أو عن الزواج.");
         history.AddUserMessage(request.UserMessage);
 
-        var functionChoiceBehavior = RequiresRegulatoryLookup(request)
-            ? FunctionChoiceBehavior.Required(
-            [
-                kernel.Plugins.GetFunction("RegulatoryData", "find_active_substance"),
-                kernel.Plugins.GetFunction("RegulatoryData", "find_product_mrl")
-            ])
-            : FunctionChoiceBehavior.Auto();
+        var ragContext = await BuildRagContextAsync(request);
+        if (!string.IsNullOrWhiteSpace(ragContext))
+            history.AddSystemMessage($"Authoritative retrieved compliance context:\n{ragContext}");
+        history.AddSystemMessage(
+            "No runtime tools are available in this gateway request. Use the farm context and the " +
+            "retrieved compliance context already supplied above; never claim that you called a tool.");
 
-        var settings = new OpenAIPromptExecutionSettings
-        {
-            Temperature = 0.2,
-            // Pesticide questions must perform at least one real regulatory lookup.
-            // Required() advertises the functions only for the first model request,
-            // so Semantic Kernel can invoke them and then obtain a user-facing answer
-            // without entering a repeated tool-call loop.
-            FunctionChoiceBehavior = functionChoiceBehavior
-        };
+        var systemPrompt = string.Join(
+            "\n\n",
+            history.Where(message => message.Role == AuthorRole.System)
+                .Select(message => message.Content));
+        var messages = history
+            .Where(message => message.Role != AuthorRole.System)
+            .Select(message => new ItiChatMessage(
+                message.Role == AuthorRole.Assistant ? "assistant" : "user",
+                message.Content ?? string.Empty))
+            .ToList();
+        var reply = await gatewayClient.ChatAsync(
+            systemPrompt,
+            messages,
+            maxTokens: 1800,
+            cancellationToken: cancellationToken);
 
-        var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
-        await foreach (var chunk in chatCompletion.GetStreamingChatMessageContentsAsync(
-                           history,
-                           settings,
-                           kernel,
-                           cancellationToken))
-        {
-            if (!string.IsNullOrEmpty(chunk.Content))
-            {
-                yield return chunk.Content;
-            }
-        }
+        if (!string.IsNullOrWhiteSpace(reply))
+            yield return reply;
     }
 
     private static AuthorRole MapRole(ChatMessageRole role) => role switch
@@ -89,6 +86,30 @@ public sealed class ConversationAiService(
         ChatMessageRole.Assistant => AuthorRole.Assistant,
         _ => AuthorRole.System
     };
+
+    private async Task<string?> BuildRagContextAsync(ConversationAiRequest request)
+    {
+        if (complianceRag is null ||
+            !TryGetSingleRegulatoryContext(request.ContextJson, out _, out var crop))
+        {
+            return null;
+        }
+
+        var query = request.UserMessage;
+        if (ContainsAny(query, "disease", "treatment", "symptom", "مرض", "علاج", "أعراض"))
+            return await complianceRag.SearchDiseaseTreatmentAsync(query, crop);
+        if (ContainsAny(query, "pesticide", "residue", "mrl", "phi", "مبيد", "متبقيات", "فترة الأمان"))
+            return await complianceRag.SearchPesticideResidueAsync(query, crop);
+        if (ContainsAny(query, "phytosanitary", "certificate", "import", "export", "شهادة", "تصدير", "استيراد"))
+            return await complianceRag.SearchPhytosanitaryAsync(query, crop);
+        if (ContainsAny(query, "quality", "grade", "size", "packaging", "جودة", "تصنيف", "حجم", "تعبئة"))
+            return await complianceRag.SearchQualityGradingAsync(query, crop);
+
+        return null;
+    }
+
+    private static bool ContainsAny(string value, params string[] terms) =>
+        terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     internal static bool RequiresRegulatoryLookup(ConversationAiRequest request)
     {

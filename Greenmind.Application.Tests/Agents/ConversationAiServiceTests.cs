@@ -3,7 +3,7 @@ using Greenmind.Application.Dtos.Regulatory;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Infrastructure.Agents;
-using Microsoft.SemanticKernel;
+using Greenmind.Infrastructure.Iti;
 
 namespace Greenmind.Application.Tests.Agents;
 
@@ -49,7 +49,7 @@ public sealed class ConversationAiServiceTests
             null,
             []);
         var service = new ConversationAiService(
-            Kernel.CreateBuilder().Build(),
+            new ModelMustNotBeCalled(),
             new RegulatoryKnowledgeStub());
         var chunks = new List<string>();
 
@@ -75,7 +75,7 @@ public sealed class ConversationAiServiceTests
             null,
             []);
         var service = new ConversationAiService(
-            Kernel.CreateBuilder().Build(),
+            new ModelMustNotBeCalled(),
             new RegulatoryKnowledgeStub());
         var chunks = new List<string>();
 
@@ -164,5 +164,31 @@ public sealed class ConversationAiServiceTests
                 residueNameOrPesticideId == "Abamectin"
                     ? [new(regionName, productType, "1", "Abamectin", 0.01m, false, "mg/kg")]
                     : []);
+    }
+
+    private sealed class ModelMustNotBeCalled : IItiBedrockGatewayClient
+    {
+        public Task<string> ChatAsync(
+            string? systemPrompt,
+            IReadOnlyList<ItiChatMessage> messages,
+            int maxTokens = 1200,
+            string? modelId = null,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("The deterministic regulatory path must not call the model.");
+
+        public Task<string> MultimodalChatAsync(
+            string? systemPrompt,
+            string text,
+            IReadOnlyList<ItiImageInput> images,
+            int maxTokens = 1200,
+            string? modelId = null,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("The deterministic regulatory path must not call the model.");
+
+        public Task<IReadOnlyList<float[]>> EmbedAsync(
+            IReadOnlyList<string> texts,
+            string inputType,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("The deterministic regulatory path must not call embeddings.");
     }
 }

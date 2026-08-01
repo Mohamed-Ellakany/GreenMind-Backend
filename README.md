@@ -8,7 +8,7 @@ ASP.NET Core API for authentication, farm administration, export plans, farm tas
 - SQL Server LocalDB (the default development connection uses `(localdb)\\MSSQLLocalDB`)
 - EF Core CLI 10 (`dotnet tool install --global dotnet-ef --version 10.*` if needed)
 - A [WeatherAPI](https://www.weatherapi.com/) key
-- A GitHub Models token that can call `openai/gpt-4.1-mini`
+- An ITI Student Bedrock Gateway API key
 
 ## One-time development setup
 
@@ -20,12 +20,24 @@ dotnet dev-certs https --trust
 dotnet user-secrets set --project Greenmind.Api "Jwt:Key" "replace-with-a-random-secret-at-least-32-characters-long"
 dotnet user-secrets set --project Greenmind.Api "Weather:BaseUrl" "https://api.weatherapi.com/v1/"
 dotnet user-secrets set --project Greenmind.Api "Weather:ApiKey" "YOUR_WEATHER_API_KEY"
-dotnet user-secrets set --project Greenmind.Api "OpenAI:Model" "openai/gpt-4.1-mini"
-dotnet user-secrets set --project Greenmind.Api "OpenAI:ApiKey" "YOUR_GITHUB_MODELS_TOKEN"
+dotnet user-secrets set --project Greenmind.Api "iti:ApiKey" "YOUR_SBG_API_KEY"
+dotnet user-secrets set --project Greenmind.Api "iti:Model" "anthropic.claude-sonnet-4-6"
 dotnet ef database update --project Greenmind.Infrastructure --startup-project Greenmind.Api
 ```
 
 Do not commit API keys. They are stored in .NET user secrets outside the repository.
+The chat gateway requires `iti:ApiKey`; without it, failed chat requests are recorded in
+the application log with the gateway status and response.
+
+Serilog writes application and HTTP request events to the SQL Server `Logs` table created
+by the `AddSerilogLogs` EF migration. It uses `ConnectionStrings:online` when that value
+is non-empty, otherwise it uses `ConnectionStrings:DefaultConnection`.
+
+Claude Sonnet 4.6 is the default for chat, planning, task proposals, and disease-image
+analysis. Titan Text Embeddings v2 remains the regulatory RAG embedding model because
+Claude does not produce embedding vectors. After switching from the former GitHub
+embedding model, re-upload the compliance source documents so their stored vectors are
+regenerated with Titan.
 
 ## Run
 
@@ -61,4 +73,3 @@ It asks the AI planner for tasks from tomorrow through the next seven days, vali
 dotnet test Greenmind.Application.Tests/Greenmind.Application.Tests.csproj
 dotnet test Greenmind.Api.Tests/Greenmind.Api.Tests.csproj
 ```
-
