@@ -1,7 +1,6 @@
 ﻿using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Application.Dtos.AI;
 using Greenmind.Domain.Entities;
-using Greenmind.Infrastructure.Iti;
 using Greenmind.Infrastructure.Rag.Chunkers;
 using Microsoft.Extensions.Logging;
 
@@ -21,18 +20,15 @@ namespace Greenmind.Infrastructure.Rag
     {
         private readonly IComplianceDocumentRepository _repo;
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IItiBedrockGatewayClient _gatewayClient;
         private readonly ILogger<ComplianceIngestionService> _logger;
 
         public ComplianceIngestionService(
             IComplianceDocumentRepository repo,
             IUnitOfWork unitOfWork,
-            IItiBedrockGatewayClient gatewayClient,
             ILogger<ComplianceIngestionService> logger)
         {
             _repo = repo;
             _unitOfWork = unitOfWork;
-            _gatewayClient = gatewayClient;
             _logger = logger;
         }
 
@@ -41,7 +37,7 @@ namespace Greenmind.Infrastructure.Rag
         {
             var rawText = PdfTextExtractor.ExtractText(pdfStream);
             var chunks = FfvStandardChunker.Chunk(rawText, sourceName, crop);
-            return await EmbedAndSaveAsync(chunks, ct);
+            return await SaveChunksAsync(chunks, ct);
         }
 
         public async Task<int> IngestEuRegulationBodyAsync(
@@ -49,7 +45,7 @@ namespace Greenmind.Infrastructure.Rag
         {
             var rawText = PdfTextExtractor.ExtractText(pdfStream);
             var chunks = EuRegulationChunker.ChunkByArticles(rawText, sourceName);
-            return await EmbedAndSaveAsync(chunks, ct);
+            return await SaveChunksAsync(chunks, ct);
         }
 
         public async Task<int> IngestEuRegulationAnnexForCropAsync(
@@ -57,25 +53,16 @@ namespace Greenmind.Infrastructure.Rag
         {
             var rawText = PdfTextExtractor.ExtractText(pdfStream);
             var chunks = EuRegulationChunker.ChunkAnnexFilteredByKeyword(rawText, sourceName, annexLabelHint, cropKeywords);
-            return await EmbedAndSaveAsync(chunks, ct);
+            return await SaveChunksAsync(chunks, ct);
         }
 
-        private async Task<int> EmbedAndSaveAsync(List<DocumentChunkDto> chunks, CancellationToken ct)
+        private async Task<int> SaveChunksAsync(List<DocumentChunkDto> chunks, CancellationToken ct)
         {
             if (chunks.Count == 0)
             {
                 _logger.LogWarning("Chunker produced 0 chunks - nothing to ingest.");
                 return 0;
             }
-
-            _logger.LogInformation("Embedding {Count} chunks...", chunks.Count);
-
-            // Batch embedding call - most embedding APIs accept a list of inputs in one request,
-            // which is much cheaper/faster than one call per chunk.
-            var embeddings = await _gatewayClient.EmbedAsync(
-                chunks.Select(c => c.Content).ToList(),
-                "search_document",
-                ct);
 
             var entities = new List<ComplianceDocument>(chunks.Count);
 
@@ -90,7 +77,9 @@ namespace Greenmind.Infrastructure.Rag
                     SourceName = chunk.SourceName,
                     SectionReference = chunk.SectionReference,
                     Content = chunk.Content,
-                    Embedding = EmbeddingSerializer.Serialize(embeddings[i])
+                    // Kept for schema compatibility; retrieval is text-based because
+                    // no approved OpenAI or Anthropic embedding model is available.
+                    Embedding = "[]"
                 });
             }
 

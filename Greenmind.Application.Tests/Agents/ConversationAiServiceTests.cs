@@ -171,7 +171,6 @@ public sealed class ConversationAiServiceTests
         public Task<string> ChatAsync(
             string? systemPrompt,
             IReadOnlyList<ItiChatMessage> messages,
-            int maxTokens = 1200,
             string? modelId = null,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The deterministic regulatory path must not call the model.");
@@ -185,10 +184,5 @@ public sealed class ConversationAiServiceTests
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The deterministic regulatory path must not call the model.");
 
-        public Task<IReadOnlyList<float[]>> EmbedAsync(
-            IReadOnlyList<string> texts,
-            string inputType,
-            CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("The deterministic regulatory path must not call embeddings.");
     }
 }

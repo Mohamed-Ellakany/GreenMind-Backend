@@ -6,11 +6,11 @@ namespace Greenmind.Application.Contracts.Persistence
     public interface IComplianceDocumentRepository : IGenericRepository<ComplianceDocument>
     {
         /// <summary>
-        /// Finds the top-K most semantically relevant chunks to the given query embedding,
-        /// optionally pre-filtered by category and/or crop before ranking.
+        /// Finds the top-K textually relevant chunks, optionally pre-filtered by
+        /// category, crop, and destination.
         /// </summary>
-        Task<List<ComplianceSearchResult>> SearchAsync(
-            float[] queryEmbedding,
+        Task<List<ComplianceSearchResult>> SearchTextAsync(
+            string searchText,
             ComplianceCategory? category = null,
             string? crop = null,
             string? destination = null,

@@ -21,7 +21,7 @@ public static class SeedExtensions
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var dbContext = services.GetRequiredService<GreenmindDbContext>();
 
-        var roles = new[] { RoleNames.Admin, RoleNames.FarmOwner };
+        var roles = new[] { RoleNames.Admin, RoleNames.SuperAdmin, RoleNames.FarmOwner };
         foreach (var r in roles)
         {
             if (!await roleManager.RoleExistsAsync(r))
@@ -45,8 +45,11 @@ public static class SeedExtensions
             if (createRes.Succeeded)
             {
                 await userManager.AddToRoleAsync(admin, RoleNames.Admin);
+                await userManager.AddToRoleAsync(admin, RoleNames.SuperAdmin);
             }
         }
+        if (!await userManager.IsInRoleAsync(admin, RoleNames.SuperAdmin))
+            await userManager.AddToRoleAsync(admin, RoleNames.SuperAdmin);
         else if (!await userManager.IsInRoleAsync(admin, RoleNames.Admin))
         {
             await userManager.AddToRoleAsync(admin, RoleNames.Admin);

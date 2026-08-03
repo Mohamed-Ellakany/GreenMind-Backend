@@ -20,9 +20,15 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
     {
         using var client = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
 
+        var analysis = await AnalyzeScheduleAsync(client, CreateAnalysisRequest());
+
         var createResponse = await client.PostAsJsonAsync(
             "/api/farm-owner/export-plans",
-            CreateRequest());
+            CreateRequest(
+                plantingDate: analysis.PlantingDate,
+                expectedHarvestDate: analysis.ExpectedHarvestDate,
+                expectedExportDate: analysis.ExpectedExportDate,
+                analysisToken: analysis.AnalysisToken));
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var created = await ReadDataAsync<ExportPlanDetailsDto>(createResponse);
@@ -31,6 +37,8 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         Assert.Equal(ExportPlanStatus.Planning.ToString(), created.Status);
         Assert.Equal(PlanningGenerationStatus.Pending.ToString(), created.PlanningStatus);
         Assert.Equal(0, created.GeneratedTaskCount);
+        Assert.Equal(29.9, created.Latitude);
+        Assert.Equal(30.9, created.Longitude);
 
         var planningResponse = await client.GetAsync(
             $"/api/farm-owner/export-plans/{created.Id}/planning-status");
@@ -44,6 +52,32 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         var detailsResponse = await client.GetAsync($"/api/farm-owner/export-plans/{created.Id}");
         var details = await ReadDataAsync<ExportPlanDetailsDto>(detailsResponse);
         Assert.Equal(created, details);
+        Assert.Equal(29.9, details.Latitude);
+        Assert.Equal(30.9, details.Longitude);
+    }
+
+    [Fact]
+    public async Task ScheduleAnalysis_UsesAndBindsExactCoordinates()
+    {
+        using var client = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var request = CreateAnalysisRequest(latitude: 29.912345, longitude: 30.923456);
+
+        var analysis = await AnalyzeScheduleAsync(client, request);
+        Assert.Equal("Feasible", analysis.Assessment);
+        Assert.Contains(analysis.Reasons, value => value.Contains("الإحداثيات"));
+
+        var changedCoordinates = CreateRequest(
+            plantingDate: analysis.PlantingDate,
+            expectedHarvestDate: analysis.ExpectedHarvestDate,
+            expectedExportDate: analysis.ExpectedExportDate,
+            analysisToken: analysis.AnalysisToken,
+            latitude: request.Latitude!.Value + 0.01,
+            longitude: request.Longitude!.Value);
+        var response = await client.PostAsJsonAsync("/api/farm-owner/export-plans", changedCoordinates);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var envelope = await response.Content.ReadFromJsonAsync<ApiResponse<JsonElement>>();
+        Assert.Contains("AnalysisToken", envelope!.Error!.ValidationErrors!.Keys);
     }
 
     [Fact]
@@ -273,7 +307,10 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         int cropId = 1,
         DateOnly? plantingDate = null,
         DateOnly? expectedHarvestDate = null,
-        DateOnly? expectedExportDate = null) =>
+        DateOnly? expectedExportDate = null,
+        string? analysisToken = null,
+        double latitude = 29.9,
+        double longitude = 30.9) =>
         new()
         {
             Name = "Summer Strawberry Plan",
@@ -281,15 +318,42 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
             DestinationId = 1,
             Governorate = "Giza",
             City = "6th of October",
-            Latitude = 29.9,
-            Longitude = 30.9,
+            Latitude = latitude,
+            Longitude = longitude,
             AreaInFeddan = 5.5m,
             PlantingDate = plantingDate ?? new DateOnly(2026, 1, 10),
             ExpectedHarvestDate = expectedHarvestDate ?? new DateOnly(2026, 4, 10),
             ExpectedExportDate = expectedExportDate ?? new DateOnly(2026, 4, 15),
             Status = ExportPlanStatus.Planning,
-            Notes = "  First season  "
+            Notes = "  First season  ",
+            AnalysisToken = analysisToken
         };
+
+    private static ExportPlanScheduleAnalysisRequest CreateAnalysisRequest(
+        double latitude = 29.9,
+        double longitude = 30.9) => new()
+        {
+            Name = "Summer Strawberry Plan",
+            CropId = 1,
+            DestinationId = 1,
+            Governorate = "Giza",
+            City = "6th of October",
+            Latitude = latitude,
+            Longitude = longitude,
+            AreaInFeddan = 5.5m,
+            Notes = "First season"
+        };
+
+    private static async Task<ExportPlanScheduleAnalysisDto> AnalyzeScheduleAsync(
+        HttpClient client,
+        ExportPlanScheduleAnalysisRequest request)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/farm-owner/export-plans/schedule-analysis",
+            request);
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        return await ReadDataAsync<ExportPlanScheduleAnalysisDto>(response);
+    }
 
     private static async Task<T> ReadDataAsync<T>(HttpResponseMessage response)
     {

@@ -4,6 +4,7 @@ using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Application.Services;
 using Greenmind.Application.Dtos.AI;
+using Greenmind.Domain.Consts.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -75,7 +76,9 @@ public class DailyRollingPlanningService : BackgroundService
 
         // Select active export plans (Planning or InProgress). Use AsNoTracking and process in pages to avoid loading all plans into memory.
         var baseQuery = uow.ExportPlans.Query()
-            .Where(p => p.Status == Greenmind.Domain.Consts.Enums.ExportPlanStatus.Planning || p.Status == Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress)
+            .Where(p =>
+                (p.Status == ExportPlanStatus.Planning || p.Status == ExportPlanStatus.InProgress) &&
+                p.PlanningStatus == PlanningGenerationStatus.Succeeded)
             .Include(p => p.Crop)
             .Include(p => p.Destination)
             .AsNoTracking();

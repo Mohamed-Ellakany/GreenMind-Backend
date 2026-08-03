@@ -7,6 +7,7 @@ using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Greenmind.Infrastructure.Disease;
 
@@ -14,7 +15,8 @@ public sealed class DiseaseReportService(
     GreenmindDbContext dbContext,
     IPrivateFileStorage fileStorage,
     IDiseaseVisionAnalyzer visionAnalyzer,
-    TimeProvider timeProvider) : IDiseaseReportService
+    TimeProvider timeProvider,
+    ILogger<DiseaseReportService> logger) : IDiseaseReportService
 {
     private const int MaximumImages = 5;
     private const int MaximumImageBytes = 10 * 1024 * 1024;
@@ -258,15 +260,36 @@ public sealed class DiseaseReportService(
         }
         catch (Exception exception)
         {
+            logger.LogError(
+                exception,
+                "Disease image analysis failed for report {ReportId} in export plan {ExportPlanId}.",
+                report.Id,
+                report.ExportPlanId);
             report.Status = DiseaseAnalysisStatus.Failed;
-            report.FailureMessage = exception is InvalidDataException
-                ? "تعذر التحقق من نتيجة التحليل. يمكنك إعادة المحاولة."
-                : "تعذر تحليل الصور حاليًا. يمكنك إعادة المحاولة لاحقًا.";
+            report.FailureMessage = AnalysisFailureMessage(exception);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    private static string AnalysisFailureMessage(Exception exception) => exception switch
+    {
+        InvalidDataException =>
+            "تعذر التحقق من نتيجة التحليل. يمكنك إعادة المحاولة.",
+        InvalidOperationException =>
+            "خدمة تحليل الصور غير مهيأة. راجع إعداد مفتاح ITI ثم أعد المحاولة.",
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden } =>
+            "رفضت خدمة التحليل المفتاح أو النموذج المحدد. راجع صلاحيات ITI ثم أعد المحاولة.",
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } =>
+            "حصة خدمة التحليل مستنفدة أو مشغولة حاليًا. أعد المحاولة لاحقًا.",
+        HttpRequestException { StatusCode: >= System.Net.HttpStatusCode.InternalServerError } =>
+            "خدمة تحليل الصور غير متاحة مؤقتًا. أعد المحاولة لاحقًا.",
+        HttpRequestException =>
+            "تعذر الاتصال بخدمة تحليل الصور. تحقق من إعداد البوابة ثم أعد المحاولة.",
+        _ =>
+            "تعذر تحليل الصور حاليًا. يمكنك إعادة المحاولة لاحقًا."
+    };
 
     private async Task<string> BuildPlanContextAsync(
         ExportPlan plan,

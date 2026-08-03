@@ -8,9 +8,12 @@ namespace Greenmind.Infrastructure.Iti;
 
 public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
 {
+    private const int MaximumTransientAttempts = 3;
     public const string DefaultChatModel = "anthropic.claude-sonnet-4-6";
-    public const string DefaultEmbeddingModel = "amazon.titan-embed-text-v2:0:8k";
-    public const string DefaultVisionModel = DefaultChatModel;
+    public const string DefaultStructuredModel = "openai.gpt-oss-120b-1:0";
+    public const string DefaultVisionModel = "anthropic.claude-haiku-4-5-20251001-v1:0";
+    private static readonly Uri ChatReferer =
+        new("http://apiaccess.iti.net.eg/student/playground");
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -26,7 +29,12 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
         _httpClient = httpClient;
         _configuration = configuration;
 
-        var apiKey = configuration["iti:ApiKey"];
+        // SBG_API_KEY is the gateway's documented environment variable. Keep
+        // iti:ApiKey as a local/user-secrets fallback for existing deployments.
+        var apiKey = Environment.GetEnvironmentVariable("SBG_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey))
+            apiKey = configuration["iti:ApiKey"];
+
         if (!string.IsNullOrWhiteSpace(apiKey))
         {
             _httpClient.DefaultRequestHeaders.Authorization =
@@ -38,7 +46,6 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
     public async Task<string> ChatAsync(
         string? systemPrompt,
         IReadOnlyList<ItiChatMessage> messages,
-        int maxTokens = 1200,
         string? modelId = null,
         CancellationToken cancellationToken = default)
     {
@@ -52,15 +59,16 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
                 role = message.Role,
                 content = message.Content
             }),
-            system_prompt = NullIfWhiteSpace(systemPrompt),
-            max_tokens = maxTokens
+            system_prompt = NullIfWhiteSpace(systemPrompt)
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(
-            "student/chat",
-            request,
-            SerializerOptions,
-            cancellationToken);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "student/chat")
+        {
+            Content = JsonContent.Create(request, options: SerializerOptions)
+        };
+        httpRequest.Headers.Referrer = ChatReferer;
+
+        using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
         using var document = await ReadSuccessfulJsonAsync(response, cancellationToken);
         return ReadOutputText(document.RootElement);
     }
@@ -97,40 +105,46 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
             max_tokens = maxTokens
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(
-            "student/multimodal-chat",
-            request,
-            SerializerOptions,
-            cancellationToken);
+        using var response = await SendMultimodalAsync(request, cancellationToken);
         using var document = await ReadSuccessfulJsonAsync(response, cancellationToken);
         return ReadOutputText(document.RootElement);
     }
 
-    public async Task<IReadOnlyList<float[]>> EmbedAsync(
-        IReadOnlyList<string> texts,
-        string inputType,
-        CancellationToken cancellationToken = default)
+    private async Task<HttpResponseMessage> SendMultimodalAsync(
+        object request,
+        CancellationToken cancellationToken)
     {
-        if (texts.Count == 0)
-            return [];
-
-        EnsureConfigured();
-
-        var request = new
+        for (var attempt = 1; ; attempt++)
         {
-            model_id = ResolveModel(null, "iti:EmbeddingModel", DefaultEmbeddingModel),
-            texts,
-            input_type = inputType
-        };
+            try
+            {
+                var response = await _httpClient.PostAsJsonAsync(
+                    "student/multimodal-chat",
+                    request,
+                    SerializerOptions,
+                    cancellationToken);
+                if (attempt == MaximumTransientAttempts || !IsTransient(response.StatusCode))
+                    return response;
 
-        using var response = await _httpClient.PostAsJsonAsync(
-            "student/embed",
-            request,
-            SerializerOptions,
-            cancellationToken);
-        using var document = await ReadSuccessfulJsonAsync(response, cancellationToken);
-        return ReadEmbeddings(document.RootElement, texts.Count);
+                response.Dispose();
+            }
+            catch (HttpRequestException) when (attempt < MaximumTransientAttempts)
+            {
+                // A connection failure can be temporary. The final exception is
+                // allowed to propagate so the report service can log its details.
+            }
+
+            await Task.Delay(RetryDelay(attempt), cancellationToken);
+        }
     }
+
+    private static bool IsTransient(System.Net.HttpStatusCode statusCode) =>
+        statusCode is System.Net.HttpStatusCode.RequestTimeout or
+            System.Net.HttpStatusCode.TooManyRequests ||
+        (int)statusCode >= 500;
+
+    private static TimeSpan RetryDelay(int attempt) =>
+        TimeSpan.FromMilliseconds(250 * attempt);
 
     private string ResolveModel(string? explicitModel, string configurationKey, string fallback)
     {
@@ -146,7 +160,7 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
         if (!_hasApiKey)
         {
             throw new InvalidOperationException(
-                "The ITI gateway is not configured. Set iti:ApiKey using user-secrets or an environment variable.");
+                "The ITI gateway is not configured. Set SBG_API_KEY or iti:ApiKey using user-secrets.");
         }
     }
 
@@ -234,40 +248,4 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
         return false;
     }
 
-    private static IReadOnlyList<float[]> ReadEmbeddings(JsonElement root, int expectedCount)
-    {
-        JsonElement collection = default;
-        foreach (var propertyName in new[] { "embeddings", "vectors", "data" })
-        {
-            if (root.TryGetProperty(propertyName, out collection) && collection.ValueKind == JsonValueKind.Array)
-                break;
-        }
-
-        if (collection.ValueKind != JsonValueKind.Array)
-            throw new InvalidDataException("ITI gateway response did not contain embeddings.");
-
-        var result = new List<float[]>();
-        foreach (var item in collection.EnumerateArray())
-        {
-            var vector = item;
-            if (item.ValueKind == JsonValueKind.Object &&
-                item.TryGetProperty("embedding", out var nestedVector))
-            {
-                vector = nestedVector;
-            }
-
-            if (vector.ValueKind != JsonValueKind.Array)
-                throw new InvalidDataException("ITI gateway returned an invalid embedding vector.");
-
-            result.Add(vector.EnumerateArray().Select(number => number.GetSingle()).ToArray());
-        }
-
-        if (result.Count != expectedCount)
-        {
-            throw new InvalidDataException(
-                $"ITI gateway returned {result.Count} embeddings for {expectedCount} texts.");
-        }
-
-        return result;
-    }
 }

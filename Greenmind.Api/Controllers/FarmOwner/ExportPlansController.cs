@@ -5,6 +5,7 @@ using Greenmind.Application.Dtos.ExportPlans;
 using Greenmind.Domain.Consts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Greenmind.Api.Controllers.FarmOwner;
 
@@ -13,6 +14,31 @@ namespace Greenmind.Api.Controllers.FarmOwner;
 [Authorize(Roles = RoleNames.FarmOwner)]
 public sealed class ExportPlansController(IExportPlanService exportPlanService) : ControllerBase
 {
+    [HttpPost("schedule-analysis")]
+    [EnableRateLimiting("ai-analysis")]
+    public async Task<ActionResult<ExportPlanScheduleAnalysisDto>> AnalyzeSchedule(
+        [FromBody] ExportPlanScheduleAnalysisRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await exportPlanService.AnalyzeScheduleAsync(
+            GetOwnerUserId(),
+            request,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ExportPlanResultStatus.Succeeded => Ok(result.Value),
+            ExportPlanResultStatus.InvalidReference => BadRequest(
+                ApiResponseFactory.ValidationFailure<ExportPlanScheduleAnalysisDto>(
+                    new Dictionary<string, string[]>
+                    {
+                        [result.ErrorField!] = [result.ErrorMessage!]
+                    },
+                    HttpContext.TraceIdentifier)),
+            _ => NotFound()
+        };
+    }
+
     [HttpPost]
     public async Task<ActionResult<ExportPlanDetailsDto>> Create(
         [FromBody] ExportPlanCreateRequest request,

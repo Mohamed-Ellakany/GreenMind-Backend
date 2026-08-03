@@ -18,6 +18,8 @@ using Greenmind.Application.Dtos.Disease;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Infrastructure.Storage;
 using Greenmind.Infrastructure.Rag;
+using Greenmind.Application.Contracts.ExportPlans;
+using Greenmind.Application.Dtos.ExportPlans;
 
 namespace Greenmind.Application.Tests.Integration;
 
@@ -58,6 +60,8 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
             services.AddSingleton<IPlanTaskProposalGenerator, StubPlanTaskProposalGenerator>();
             services.RemoveAll<IDiseaseVisionAnalyzer>();
             services.AddSingleton<IDiseaseVisionAnalyzer, StubDiseaseVisionAnalyzer>();
+            services.RemoveAll<IExportScheduleAdvisor>();
+            services.AddSingleton<IExportScheduleAdvisor, StubExportScheduleAdvisor>();
 
             services.AddAuthentication(options =>
                 {
@@ -130,6 +134,34 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
         if (Directory.Exists(PrivateStorageRoot))
             Directory.Delete(PrivateStorageRoot, recursive: true);
         return Task.CompletedTask;
+    }
+}
+
+internal sealed class StubExportScheduleAdvisor : IExportScheduleAdvisor
+{
+    public Task<ExportScheduleAdvisorResult> AnalyzeAsync(
+        ExportScheduleAdvisorContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var planting = context.RequestedPlantingDate ?? context.Today.AddDays(10);
+        var harvest = context.RequestedHarvestDate ?? planting.AddDays(90);
+        var exporting = context.RequestedExportDate ?? harvest.AddDays(7);
+        return Task.FromResult(new ExportScheduleAdvisorResult(
+            "موسم اختباري",
+            planting,
+            harvest,
+            exporting,
+            "Feasible",
+            "High",
+            "تحليل اختباري حسب الإحداثيات.",
+            ["تم استخدام الإحداثيات"],
+            [],
+            [],
+            [],
+            [new ScheduleAnalysisSourceDto(
+                "test-source", "Test climate", "Integration tests", null,
+                DateTime.UtcNow, "OfficialSource", ["climate"])],
+            []));
     }
 }
 

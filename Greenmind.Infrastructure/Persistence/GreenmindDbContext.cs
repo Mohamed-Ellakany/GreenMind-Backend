@@ -32,10 +32,19 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<ExportPlanBudgetLine> ExportPlanBudgetLines => Set<ExportPlanBudgetLine>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<ExpenseAttachment> ExpenseAttachments => Set<ExpenseAttachment>();
+    public DbSet<AdminInvitation> AdminInvitations => Set<AdminInvitation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<AdminInvitation>(entity =>
+        {
+            entity.HasIndex(item => item.TokenHash).IsUnique();
+            entity.HasIndex(item => new { item.Email, item.ExpiresAtUtc });
+            entity.HasOne(item => item.CreatedByUser).WithMany(user => user.CreatedAdminInvitations)
+                .HasForeignKey(item => item.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GreenmindDbContext).Assembly);
 

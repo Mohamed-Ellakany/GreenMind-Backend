@@ -115,7 +115,9 @@ public sealed class ApiResponseWrappingFilter(ILoggerFactory loggerFactory) : IA
             null => null,
             string message => message,
             ProblemDetails problemDetails => problemDetails.Detail ?? problemDetails.Title,
-            _ => null
+            _ => value.GetType().GetProperty("message", System.Reflection.BindingFlags.IgnoreCase |
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                ?.GetValue(value) as string
         };
     }
 }

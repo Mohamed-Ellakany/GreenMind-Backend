@@ -34,7 +34,7 @@ namespace Greenmind.Infrastructure.Agents
                 [new ItiChatMessage(
                     "user",
                     $"{userPrompt}\n\nAuthoritative compliance search results:\n{complianceContext}")],
-                maxTokens: 3000);
+                modelId: ItiBedrockGatewayClient.DefaultStructuredModel);
 
             var response = JsonSerializer.Deserialize<AgentResponse>(ItiJson.ExtractObject(json), new JsonSerializerOptions
             {

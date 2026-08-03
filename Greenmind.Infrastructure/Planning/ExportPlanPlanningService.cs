@@ -46,7 +46,8 @@ public sealed class ExportPlanPlanningService(
         // The weather request does not use EF, so it can run while database context is loaded.
         // EF Core DbContext instances themselves must only execute one operation at a time.
         var weatherTask = weatherHttpClient.GetForecastAsync(
-            $"{plan.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{plan.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            plan.Latitude,
+            plan.Longitude,
             start,
             end);
         var soilHistory = await soilRepository.GetHistoryAsync(plan.Id, historyStart);

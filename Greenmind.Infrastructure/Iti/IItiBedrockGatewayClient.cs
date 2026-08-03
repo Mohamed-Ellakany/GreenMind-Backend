@@ -5,7 +5,6 @@ public interface IItiBedrockGatewayClient
     Task<string> ChatAsync(
         string? systemPrompt,
         IReadOnlyList<ItiChatMessage> messages,
-        int maxTokens = 1200,
         string? modelId = null,
         CancellationToken cancellationToken = default);
 
@@ -17,10 +16,6 @@ public interface IItiBedrockGatewayClient
         string? modelId = null,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<float[]>> EmbedAsync(
-        IReadOnlyList<string> texts,
-        string inputType,
-        CancellationToken cancellationToken = default);
 }
 
 public sealed record ItiChatMessage(string Role, string Content);
