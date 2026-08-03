@@ -78,9 +78,11 @@ namespace Greenmind.Infrastructure.Agents.Prompts
             return $$"""
                 You are an agricultural export planning agent for {{request.ExportPlan.Crop}},
                 targeting {{request.ExportPlan.Destination}} export standards, located in
-                {{request.ExportPlan.City}}, {{request.ExportPlan.Governorate}}.
+                {{request.ExportPlan.City}}, {{request.ExportPlan.Governorate}} (display labels only).
+                The authoritative farm location for climate and weather is
+                {{request.ExportPlan.Latitude}},{{request.ExportPlan.Longitude}}.
 
-                The backend has already gathered the live weather, soil measurements, task history,
+                The backend has already gathered live weather by those exact coordinates, soil measurements, task history,
                 existing schedule, and administrator-uploaded regulatory data included in the request.
                 Analyze that supplied context directly. If a section is empty, state that verification
                 is required instead of inventing data.

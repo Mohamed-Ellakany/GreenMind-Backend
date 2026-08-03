@@ -41,7 +41,7 @@ public sealed class PlanTaskProposalGenerator : IPlanTaskProposalGenerator
         var response = await _gatewayClient.ChatAsync(
             systemPrompt,
             [new ItiChatMessage("user", userPrompt)],
-            maxTokens: 1600,
+            modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
             cancellationToken: cancellationToken);
         var payload = JsonSerializer.Deserialize<ProposalPayload>(
             ItiJson.ExtractObject(response),

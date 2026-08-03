@@ -2,6 +2,7 @@
 using Greenmind.Application.Dtos.AI.WeatherApi;
 using Greenmind.Application.Interfaces.AI;
 using Microsoft.Extensions.Configuration;
+using System.Globalization;
 using System.Net.Http.Json;
 
 public class WeatherHttpClient : IWeatherHttpClient
@@ -15,7 +16,11 @@ public class WeatherHttpClient : IWeatherHttpClient
         _apiKey = config["Weather:ApiKey"]!;
     }
 
-    public async Task<WeatherForecastDto> GetForecastAsync(string city, DateOnly start, DateOnly end)
+    public async Task<WeatherForecastDto> GetForecastAsync(
+        double latitude,
+        double longitude,
+        DateOnly start,
+        DateOnly end)
     {
         if (end < start)
         {
@@ -28,7 +33,10 @@ public class WeatherHttpClient : IWeatherHttpClient
 
         days = Math.Min(days, 14);
 
-        var url = $"forecast.json?key={_apiKey}&q={Uri.EscapeDataString(city)}&days={days}";
+        var coordinates = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{latitude},{longitude}");
+        var url = $"forecast.json?key={_apiKey}&q={Uri.EscapeDataString(coordinates)}&days={days}";
         var resp = await _http.GetAsync(url);
         resp.EnsureSuccessStatusCode();
 

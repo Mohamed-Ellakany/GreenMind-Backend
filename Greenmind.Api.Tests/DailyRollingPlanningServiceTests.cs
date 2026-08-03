@@ -90,7 +90,8 @@ public class DailyRollingPlanningServiceTests
             Governorate = "GOV",
             City = "City",
             AreaInFeddan = 1.0m,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded
         };
 
         db.ExportPlans.Add(plan);
@@ -148,7 +149,8 @@ public class DailyRollingPlanningServiceTests
             Governorate = "GOV",
             City = "City",
             AreaInFeddan = 1.0m,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded
         };
 
         db.ExportPlans.Add(plan);
@@ -196,7 +198,8 @@ public class DailyRollingPlanningServiceTests
             Governorate = "GOV",
             City = "City",
             AreaInFeddan = 1.0m,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded
         };
 
         db.ExportPlans.Add(plan);
@@ -211,6 +214,40 @@ public class DailyRollingPlanningServiceTests
         _agentMock.Verify(a => a.GeneratePlanAsync(It.IsAny<Greenmind.Application.Dtos.AI.AgentRequest>()), Times.Never);
         var tasks = db.FarmTasks.Where(t => t.ExportPlanId == plan.Id).ToList();
         Assert.Empty(tasks);
+    }
+
+    [Fact]
+    public async Task RunOnce_InitialPlanningNotSucceeded_SkipsAndDoesNotPlan()
+    {
+        using var scope = _provider.CreateScope();
+        var provider = scope.ServiceProvider;
+        var db = provider.GetRequiredService<GreenmindDbContext>();
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var plan = new Greenmind.Domain.Entities.ExportPlan
+        {
+            Name = "PlanStillGenerating",
+            Crop = new Greenmind.Domain.Entities.Crop { Name = "Tomato" },
+            Destination = new Greenmind.Domain.Entities.Destination { Name = "Export" },
+            PlantingDate = today.AddDays(-30),
+            ExpectedExportDate = today.AddDays(30),
+            ExpectedHarvestDate = today.AddDays(10),
+            Governorate = "GOV",
+            City = "City",
+            AreaInFeddan = 1.0m,
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.InProgress
+        };
+
+        db.ExportPlans.Add(plan);
+        await db.SaveChangesAsync();
+
+        var hosted = provider.GetRequiredService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+
+        await hosted.RunOnceAsync();
+
+        _agentMock.Verify(a => a.GeneratePlanAsync(It.IsAny<Greenmind.Application.Dtos.AI.AgentRequest>()), Times.Never);
+        Assert.Empty(db.FarmTasks.Where(task => task.ExportPlanId == plan.Id));
     }
 
     [Fact]
@@ -234,7 +271,8 @@ public class DailyRollingPlanningServiceTests
             Governorate = "GOV",
             City = "City",
             AreaInFeddan = 1.0m,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded
         };
 
         // Plan 2 is valid and should be processed
@@ -249,7 +287,8 @@ public class DailyRollingPlanningServiceTests
             Governorate = "GOV",
             City = "City",
             AreaInFeddan = 1.0m,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded
         };
 
         db.ExportPlans.AddRange(plan1, plan2);
@@ -290,7 +329,8 @@ public class DailyRollingPlanningServiceTests
             Governorate = "GOV",
             City = "City",
             AreaInFeddan = 1.0m,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress
+            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.InProgress,
+            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded
         };
 
         db.ExportPlans.Add(plan);

@@ -73,7 +73,6 @@ public sealed class ConversationAiService(
         var reply = await gatewayClient.ChatAsync(
             systemPrompt,
             messages,
-            maxTokens: 1800,
             cancellationToken: cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(reply))

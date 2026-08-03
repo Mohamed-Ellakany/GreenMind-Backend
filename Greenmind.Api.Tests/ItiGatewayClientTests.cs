@@ -10,7 +10,7 @@ namespace Greenmind.Api.Tests;
 public sealed class ItiGatewayClientTests
 {
     [Fact]
-    public async Task ChatAsync_UsesConfiguredModelBearerTokenAndOutputText()
+    public async Task ChatAsync_UsesStudentChatSchemaHeadersAndOutputText()
     {
         var handler = new RecordingHandler(
             """{"output_text":"gateway reply"}""");
@@ -22,42 +22,24 @@ public sealed class ItiGatewayClientTests
 
         var result = await client.ChatAsync(
             "Be concise.",
-            [new ItiChatMessage("user", "Hello")],
-            maxTokens: 321);
+            [new ItiChatMessage("user", "Hello")]);
 
         Assert.Equal("gateway reply", result);
         Assert.Equal(
-            "https://apiaccess.iti.net.eg/api/v1/student/chat",
+            "http://apiaccess.iti.net.eg/api/v1/student/chat",
             handler.RequestUri?.ToString());
+        Assert.Equal(
+            "http://apiaccess.iti.net.eg/student/playground",
+            handler.Referrer?.ToString());
         Assert.Equal("Bearer", handler.AuthorizationScheme);
         Assert.Equal("sbg_test_key", handler.AuthorizationParameter);
 
         using var body = JsonDocument.Parse(handler.RequestBody!);
+        Assert.Equal(3, body.RootElement.EnumerateObject().Count());
         Assert.Equal("anthropic.claude-sonnet-4-6", body.RootElement.GetProperty("model_id").GetString());
-        Assert.Equal(321, body.RootElement.GetProperty("max_tokens").GetInt32());
+        Assert.Equal("Be concise.", body.RootElement.GetProperty("system_prompt").GetString());
+        Assert.Equal("user", body.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
         Assert.Equal("Hello", body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
-    }
-
-    [Fact]
-    public async Task EmbedAsync_ParsesObjectWrappedEmbeddingVectors()
-    {
-        var handler = new RecordingHandler(
-            """{"embeddings":[{"embedding":[0.25,-0.5]},{"embedding":[1.0,0.75]}]}""");
-        var client = CreateClient(handler, new Dictionary<string, string?>
-        {
-            ["iti:ApiKey"] = "sbg_test_key"
-        });
-
-        var result = await client.EmbedAsync(["one", "two"], "search_document");
-
-        Assert.Equal(2, result.Count);
-        Assert.Equal([0.25f, -0.5f], result[0]);
-        Assert.Equal([1.0f, 0.75f], result[1]);
-        using var body = JsonDocument.Parse(handler.RequestBody!);
-        Assert.Equal(
-            ItiBedrockGatewayClient.DefaultEmbeddingModel,
-            body.RootElement.GetProperty("model_id").GetString());
-        Assert.Equal("search_document", body.RootElement.GetProperty("input_type").GetString());
     }
 
     [Fact]
@@ -86,8 +68,84 @@ public sealed class ItiGatewayClientTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             client.ChatAsync(null, [new ItiChatMessage("user", "Hello")]));
 
-        Assert.Contains("iti:ApiKey", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("SBG_API_KEY", exception.Message, StringComparison.Ordinal);
         Assert.Null(handler.RequestUri);
+    }
+
+    [Fact]
+    public async Task MultimodalChatAsync_UsesRequiredImageSchemaAndConfiguredBearerToken()
+    {
+        var handler = new RecordingHandler("""{"output_text":"image reply"}""");
+        var client = CreateClient(handler, new Dictionary<string, string?>
+        {
+            ["iti:ApiKey"] = "sbg_test_key"
+        });
+
+        var result = await client.MultimodalChatAsync(
+            "Be concise.",
+            "Describe this image for a beginner.",
+            [new ItiImageInput("png", "BASE64_IMAGE")],
+            maxTokens: 300);
+
+        Assert.Equal("image reply", result);
+        Assert.Equal(
+            "http://apiaccess.iti.net.eg/api/v1/student/multimodal-chat",
+            handler.RequestUri?.ToString());
+        Assert.Equal("Bearer", handler.AuthorizationScheme);
+        Assert.Equal("sbg_test_key", handler.AuthorizationParameter);
+
+        using var body = JsonDocument.Parse(handler.RequestBody!);
+        Assert.Equal("anthropic.claude-haiku-4-5-20251001-v1:0", body.RootElement.GetProperty("model_id").GetString());
+        Assert.Equal(300, body.RootElement.GetProperty("max_tokens").GetInt32());
+        var message = body.RootElement.GetProperty("messages")[0];
+        Assert.Equal("user", message.GetProperty("role").GetString());
+        Assert.Equal("Be concise.\n\nDescribe this image for a beginner.", message.GetProperty("text").GetString());
+        var image = message.GetProperty("images")[0];
+        Assert.Equal("png", image.GetProperty("format").GetString());
+        Assert.Equal("BASE64_IMAGE", image.GetProperty("data_base64").GetString());
+    }
+
+    [Fact]
+    public async Task MultimodalChatAsync_RetriesTransientGatewayFailures()
+    {
+        var handler = new RecordingHandler(
+            """{"output_text":"image reply"}""",
+            HttpStatusCode.ServiceUnavailable,
+            HttpStatusCode.TooManyRequests,
+            HttpStatusCode.OK);
+        var client = CreateClient(handler, new Dictionary<string, string?>
+        {
+            ["iti:ApiKey"] = "sbg_test_key"
+        });
+
+        var result = await client.MultimodalChatAsync(
+            null,
+            "Describe the image.",
+            [new ItiImageInput("png", "BASE64_IMAGE")]);
+
+        Assert.Equal("image reply", result);
+        Assert.Equal(3, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task MultimodalChatAsync_DoesNotRetryPermanentGatewayFailures()
+    {
+        var handler = new RecordingHandler(
+            """{"detail":"model is not allowed"}""",
+            HttpStatusCode.Forbidden);
+        var client = CreateClient(handler, new Dictionary<string, string?>
+        {
+            ["iti:ApiKey"] = "sbg_test_key"
+        });
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.MultimodalChatAsync(
+                null,
+                "Describe the image.",
+                [new ItiImageInput("png", "BASE64_IMAGE")]));
+
+        Assert.Equal(HttpStatusCode.Forbidden, exception.StatusCode);
+        Assert.Equal(1, handler.RequestCount);
     }
 
     private static ItiBedrockGatewayClient CreateClient(
@@ -99,15 +157,21 @@ public sealed class ItiGatewayClientTests
             .Build();
         var httpClient = new HttpClient(handler)
         {
-            BaseAddress = new Uri("https://apiaccess.iti.net.eg/api/v1/")
+            BaseAddress = new Uri("http://apiaccess.iti.net.eg/api/v1/")
         };
         return new ItiBedrockGatewayClient(httpClient, configuration);
     }
 
-    private sealed class RecordingHandler(string responseJson) : HttpMessageHandler
+    private sealed class RecordingHandler(
+        string responseJson,
+        params HttpStatusCode[] responseStatuses) : HttpMessageHandler
     {
+        private readonly Queue<HttpStatusCode> _responseStatuses = new(responseStatuses);
+
+        public int RequestCount { get; private set; }
         public Uri? RequestUri { get; private set; }
         public string? RequestBody { get; private set; }
+        public Uri? Referrer { get; private set; }
         public string? AuthorizationScheme { get; private set; }
         public string? AuthorizationParameter { get; private set; }
 
@@ -115,12 +179,17 @@ public sealed class ItiGatewayClientTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            RequestCount++;
             RequestUri = request.RequestUri;
             RequestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            Referrer = request.Headers.Referrer;
             AuthorizationScheme = request.Headers.Authorization?.Scheme;
             AuthorizationParameter = request.Headers.Authorization?.Parameter;
 
-            return new HttpResponseMessage(HttpStatusCode.OK)
+            return new HttpResponseMessage(
+                _responseStatuses.Count > 0
+                    ? _responseStatuses.Dequeue()
+                    : HttpStatusCode.OK)
             {
                 Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
             };

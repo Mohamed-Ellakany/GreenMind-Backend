@@ -5,9 +5,12 @@ using Greenmind.Api.Models;
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Net.Mail;
+using Greenmind.Api.Services;
 using Greenmind.Application.Contracts.Api;
 using Greenmind.Domain.Consts;
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 
 namespace Greenmind.Api.Controllers;
@@ -20,6 +23,8 @@ public class AuthController : ControllerBase
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IUnitOfWork _unitOfWork;
     private readonly GreenmindDbContext _db;
+    private readonly IAccountEmailService _emailService;
+    private readonly ILogger<AuthController> _logger;
 
     private const string FarmOwnerRole = "FarmOwner";
     private readonly Greenmind.Application.Services.IJwtTokenService _jwtService;
@@ -28,13 +33,17 @@ public class AuthController : ControllerBase
         RoleManager<IdentityRole> roleManager,
         IUnitOfWork unitOfWork,
         GreenmindDbContext db,
-        Greenmind.Application.Services.IJwtTokenService jwtService)
+        Greenmind.Application.Services.IJwtTokenService jwtService,
+        IAccountEmailService emailService,
+        ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _unitOfWork = unitOfWork;
         _db = db;
         _jwtService = jwtService;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -105,6 +114,8 @@ public class AuthController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
 
         await tx.CommitAsync();
+
+        await TrySendRegistrationEmailsAsync(user, farm);
 
         var response = new RegisterResponse
         {
@@ -204,6 +215,53 @@ public class AuthController : ControllerBase
         return account is null ? Unauthorized() : Ok(account);
     }
 
+    [Authorize]
+    [HttpPut("me/profile")]
+    public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateAccountProfileRequest request, CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return Unauthorized();
+
+        var email = request.Email.Trim();
+        var existing = await _userManager.FindByEmailAsync(email);
+        if (existing is not null && existing.Id != user.Id)
+            return Conflict(new { Message = "Email already in use." });
+
+        user.FullName = request.FullName.Trim();
+        user.Email = email;
+        user.UserName = email;
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return BadRequest(new { Errors = result.Errors.Select(error => error.Description) });
+
+        return await Me(cancellationToken);
+    }
+
+    [Authorize]
+    [HttpPut("me/password")]
+    public async Task<IActionResult> ChangeMyPassword([FromBody] ChangeAccountPasswordRequest request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return Unauthorized();
+
+        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+            return BadRequest(new { Errors = result.Errors.Select(error => error.Description) });
+
+        return NoContent();
+    }
+
     private ObjectResult AccountStateUnauthorized(string code, string message) =>
         StatusCode(
             StatusCodes.Status401Unauthorized,
@@ -212,6 +270,49 @@ public class AuthController : ControllerBase
                 code,
                 message,
                 HttpContext.TraceIdentifier));
+
+    private async Task TrySendRegistrationEmailsAsync(ApplicationUser user, Farm farm)
+    {
+        if (!_emailService.IsConfigured)
+        {
+            _logger.LogInformation(
+                "Skipping registration emails for farm {FarmId} because SMTP is not configured.",
+                farm.Id);
+            return;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                await _emailService.SendRegistrationReceivedAsync(
+                    user.Email,
+                    user.FullName,
+                    farm.Name,
+                    HttpContext.RequestAborted);
+            }
+
+            var adminEmails = (await _userManager.GetUsersInRoleAsync(RoleNames.Admin))
+                .Where(admin => admin.IsActive && !string.IsNullOrWhiteSpace(admin.Email))
+                .Select(admin => admin.Email!)
+                .ToArray();
+
+            await _emailService.SendNewRegistrationAlertAsync(
+                adminEmails,
+                user.FullName,
+                user.Email ?? "",
+                farm.Name,
+                farm.Id,
+                HttpContext.RequestAborted);
+        }
+        catch (Exception exception) when (exception is SmtpException or InvalidOperationException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Registration emails could not be sent for farm {FarmId}.",
+                farm.Id);
+        }
+    }
 }
 
 public sealed record AccountProfileResponse(
@@ -221,3 +322,11 @@ public sealed record AccountProfileResponse(
     int? FarmId,
     bool IsActive,
     bool? IsFarmApproved);
+
+public sealed record UpdateAccountProfileRequest(
+    [Required, MaxLength(150)] string FullName,
+    [Required, EmailAddress, MaxLength(256)] string Email);
+
+public sealed record ChangeAccountPasswordRequest(
+    [Required] string CurrentPassword,
+    [Required, MinLength(8)] string NewPassword);

@@ -10,7 +10,23 @@ namespace Greenmind.Infrastructure.Disease;
 
 public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
 {
-    private const string PromptVersion = "disease-v1";
+    private const string PromptVersion = "disease-v2";
+    private const int MaxTokens = 1800;
+    private const string ResponseSchema =
+        """
+        Return exactly one JSON object with all of these properties and no markdown:
+        {
+          "suspectedDisease": "Arabic text",
+          "confidencePercentage": 0,
+          "severity": "low | medium | high | critical",
+          "observedSymptoms": "Arabic text",
+          "recommendedActions": "Arabic text",
+          "exportImpact": "Arabic text",
+          "advisoryWarning": "Arabic text"
+        }
+        Never rename or omit a property. Use an Arabic explanatory value when a descriptive
+        value cannot be determined; confidencePercentage must be a JSON number.
+        """;
     private readonly IItiBedrockGatewayClient _gatewayClient;
     private readonly string _modelName;
 
@@ -54,17 +70,41 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
                 ToImageFormat(image.ContentType),
                 Convert.ToBase64String(image.Content)))
             .ToList();
-        var response = await _gatewayClient.MultimodalChatAsync(
+        var response = await AnalyzeImagesAsync(
             systemPrompt,
-            userPrompt,
+            $"{userPrompt}\n\n{ResponseSchema}",
             images,
-            maxTokens: 1800,
-            modelId: _modelName,
-            cancellationToken: cancellationToken);
-        var payload = JsonSerializer.Deserialize<DiseaseAnalysisPayload>(
-            ItiJson.ExtractObject(response),
-            new JsonSerializerOptions(JsonSerializerDefaults.Web))
-            ?? throw new InvalidDataException("Disease model returned no structured result.");
+            cancellationToken);
+        DiseaseAnalysisPayload payload;
+        try
+        {
+            payload = DeserializePayload(response);
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidDataException)
+        {
+            var correctionPrompt = $"""
+                Your previous response did not match the required JSON contract. Analyze the
+                same images again and return a complete replacement response.
+
+                {ResponseSchema}
+                """;
+            response = await AnalyzeImagesAsync(
+                systemPrompt,
+                $"{userPrompt}\n\n{correctionPrompt}",
+                images,
+                cancellationToken);
+
+            try
+            {
+                payload = DeserializePayload(response);
+            }
+            catch (Exception retryException) when (retryException is JsonException or InvalidDataException)
+            {
+                throw new InvalidDataException(
+                    "Disease model returned an invalid structured result after retry.",
+                    retryException);
+            }
+        }
 
         return new DiseaseVisionResult(
             payload.SuspectedDisease,
@@ -77,6 +117,25 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
             _modelName,
             PromptVersion);
     }
+
+    private Task<string> AnalyzeImagesAsync(
+        string systemPrompt,
+        string userPrompt,
+        IReadOnlyList<ItiImageInput> images,
+        CancellationToken cancellationToken) =>
+        _gatewayClient.MultimodalChatAsync(
+            systemPrompt,
+            userPrompt,
+            images,
+            maxTokens: MaxTokens,
+            modelId: _modelName,
+            cancellationToken: cancellationToken);
+
+    private static DiseaseAnalysisPayload DeserializePayload(string response) =>
+        JsonSerializer.Deserialize<DiseaseAnalysisPayload>(
+            ItiJson.ExtractObject(response),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        ?? throw new InvalidDataException("Disease model returned no structured result.");
 
     private static string ToImageFormat(string contentType) =>
         contentType.ToLowerInvariant() switch

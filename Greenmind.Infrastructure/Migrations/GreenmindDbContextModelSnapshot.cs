@@ -92,6 +92,58 @@ namespace Greenmind.Infrastructure.Migrations
                     b.ToTable("ActiveSubstances", (string)null);
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.AdminInvitation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AcceptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("Email", "ExpiresAtUtc");
+
+                    b.ToTable("AdminInvitations");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -344,9 +396,19 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<DateOnly?>("EffectiveDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Embedding")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Publisher")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("RetrievedAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("SectionReference")
                         .HasMaxLength(200)
@@ -357,11 +419,20 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("TrustLevel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Category", "Crop", "Destination");
 
-                    b.ToTable("ComplianceDocuments", (string)null);
+                    b.ToTable("ComplianceDocuments");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Crop", b =>
@@ -403,7 +474,7 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("Crops", (string)null);
+                    b.ToTable("Crops");
 
                     b.HasData(
                         new
@@ -501,7 +572,7 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("Destinations", (string)null);
+                    b.ToTable("Destinations");
 
                     b.HasData(
                         new
@@ -985,7 +1056,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("ExportPlans", (string)null);
+                    b.ToTable("ExportPlans");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ExportPlanBudget", b =>
@@ -1089,7 +1160,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("OwnerUserId")
                         .IsUnique();
 
-                    b.ToTable("Farms", (string)null);
+                    b.ToTable("Farms");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
@@ -1143,7 +1214,7 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
                         .IsUnique();
 
-                    b.ToTable("FarmTasks", (string)null);
+                    b.ToTable("FarmTasks");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ProductMrl", b =>
@@ -1248,7 +1319,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("ExportPlanId");
 
-                    b.ToTable("SoilMeasurements", (string)null);
+                    b.ToTable("SoilMeasurements");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
@@ -1370,7 +1441,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TaskTypes", (string)null);
+                    b.ToTable("TaskTypes");
 
                     b.HasData(
                         new
@@ -1578,6 +1649,17 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.AdminInvitation", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "CreatedByUser")
+                        .WithMany("CreatedAdminInvitations")
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ChatAttachment", b =>
@@ -1928,6 +2010,8 @@ namespace Greenmind.Infrastructure.Migrations
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ApplicationUser", b =>
                 {
+                    b.Navigation("CreatedAdminInvitations");
+
                     b.Navigation("Farm");
                 });
 

@@ -42,6 +42,19 @@ namespace Greenmind.Domain.Entities
         [MaxLength(200)]
         public string? SectionReference { get; set; }
 
+        [MaxLength(500)]
+        public string? SourceUrl { get; set; }
+
+        [MaxLength(200)]
+        public string? Publisher { get; set; }
+
+        public DateTime? RetrievedAtUtc { get; set; }
+
+        public DateOnly? EffectiveDate { get; set; }
+
+        [MaxLength(30)]
+        public string TrustLevel { get; set; } = "Official";
+
         /// <summary>
         /// The actual chunk text that gets embedded and shown to the LLM at retrieval time.
         /// </summary>

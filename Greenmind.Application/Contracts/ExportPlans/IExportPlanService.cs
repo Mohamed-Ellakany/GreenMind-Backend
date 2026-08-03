@@ -18,6 +18,11 @@ public interface IExportPlanService
         string ownerUserId,
         CancellationToken cancellationToken = default);
 
+    Task<ExportPlanResult<ExportPlanScheduleAnalysisDto>> AnalyzeScheduleAsync(
+        string ownerUserId,
+        ExportPlanScheduleAnalysisRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<ExportPlanResult<PlanningStatusDto>> GetPlanningStatusAsync(
         int exportPlanId,
         string ownerUserId,
@@ -26,5 +31,12 @@ public interface IExportPlanService
     Task<ExportPlanResult<PlanningStatusDto>> RetryPlanningAsync(
         int exportPlanId,
         string ownerUserId,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IExportScheduleAdvisor
+{
+    Task<ExportScheduleAdvisorResult> AnalyzeAsync(
+        ExportScheduleAdvisorContext context,
         CancellationToken cancellationToken = default);
 }

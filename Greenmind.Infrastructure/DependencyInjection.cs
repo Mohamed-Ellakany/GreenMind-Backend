@@ -52,6 +52,13 @@ public static class DependencyInjection
         services.AddSingleton<ISeasonCalculationService, SeasonCalculationService>();
         services.AddScoped<IExportPlanDashboardService, ExportPlanDashboardService>();
         services.AddScoped<IExportPlanService, ExportPlanService>();
+        services.AddScoped<IExportScheduleAdvisor, TrustedExportScheduleAdvisor>();
+        services.AddMemoryCache();
+        services.AddHttpClient<IClimateDataClient, NasaPowerClimateClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://power.larc.nasa.gov/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddScoped<ISoilMeasurementService, SoilMeasurementService>();
         services.AddScoped<IExportPlanPlanningService, ExportPlanPlanningService>();
         services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();

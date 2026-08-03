@@ -70,7 +70,7 @@ public static class KernelSetup
     public static Uri CreateItiBaseAddress(string? baseUrl)
     {
         var value = string.IsNullOrWhiteSpace(baseUrl)
-            ? "https://apiaccess.iti.net.eg/api/v1/"
+            ? "http://apiaccess.iti.net.eg/api/v1/"
             : baseUrl;
         var normalized = value.EndsWith("/", StringComparison.Ordinal)
             ? value

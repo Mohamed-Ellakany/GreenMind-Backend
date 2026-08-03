@@ -2,7 +2,6 @@
 using System.Text;
 using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Domain.Consts.Enums;
-using Greenmind.Infrastructure.Iti;
 using Microsoft.SemanticKernel;
 
 namespace Greenmind.Infrastructure.Agents.Plugins
@@ -10,13 +9,8 @@ namespace Greenmind.Infrastructure.Agents.Plugins
     public class ComplianceRagPlugin
     {
         private readonly IComplianceDocumentRepository _repo;
-        private readonly IItiBedrockGatewayClient _gatewayClient;
 
-        public ComplianceRagPlugin(IComplianceDocumentRepository repo, IItiBedrockGatewayClient gatewayClient)
-        {
-            _repo = repo;
-            _gatewayClient = gatewayClient;
-        }
+        public ComplianceRagPlugin(IComplianceDocumentRepository repo) => _repo = repo;
 
         [KernelFunction("search_quality_grading_rules")]
         [Description("Searches UNECE quality/grading/sizing/packaging standards for the crop (e.g. minimum size, class Extra/I/II requirements, tolerances). Use before generating QualityCheck, Harvest, or ExportPrep tasks.")]
@@ -56,12 +50,8 @@ namespace Greenmind.Infrastructure.Agents.Plugins
 
         private async Task<string> SearchAsync(string query, ComplianceCategory category, string? crop, string? destination)
         {
-            var queryEmbedding = (await _gatewayClient.EmbedAsync(
-                [query],
-                "search_query"))[0];
-
-            var results = await _repo.SearchAsync(
-                queryEmbedding,
+            var results = await _repo.SearchTextAsync(
+                query,
                 category: category,
                 crop: crop,
                 destination: destination,

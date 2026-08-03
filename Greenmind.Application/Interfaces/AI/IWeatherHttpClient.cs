@@ -7,7 +7,7 @@ namespace Greenmind.Application.Interfaces.AI
 {
     public interface IWeatherHttpClient
     {
-        Task<WeatherForecastDto> GetForecastAsync(string city, DateOnly start, DateOnly end);
+        Task<WeatherForecastDto> GetForecastAsync(double latitude, double longitude, DateOnly start, DateOnly end);
 
     }
 }

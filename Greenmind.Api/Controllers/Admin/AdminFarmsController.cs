@@ -1,3 +1,5 @@
+using System.Net.Mail;
+using Greenmind.Api.Services;
 using Greenmind.Application.Contracts.Admin;
 using Greenmind.Application.Dtos.Admin;
 using Greenmind.Domain.Consts;
@@ -10,7 +12,10 @@ namespace Greenmind.Api.Controllers.Admin;
 [ApiController]
 [Route("api/admin/farms")]
 [Authorize(Roles = RoleNames.Admin)]
-public sealed class AdminFarmsController(IPlatformAdminService adminService) : ControllerBase
+public sealed class AdminFarmsController(
+    IPlatformAdminService adminService,
+    IAccountEmailService emailService,
+    ILogger<AdminFarmsController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<FarmAccountDto>>> GetFarms(
@@ -32,6 +37,10 @@ public sealed class AdminFarmsController(IPlatformAdminService adminService) : C
         CancellationToken cancellationToken)
     {
         var result = await adminService.ApproveFarmAsync(farmId, cancellationToken);
+        if (result is { Status: AdminOperationStatus.Succeeded, Value: not null })
+        {
+            await TrySendApprovalEmailAsync(result.Value, cancellationToken);
+        }
         return ToActionResult(result);
     }
 
@@ -57,6 +66,29 @@ public sealed class AdminFarmsController(IPlatformAdminService adminService) : C
             AdminOperationStatus.Conflict => Conflict(result.ErrorMessage),
             _ => throw new InvalidOperationException("Unsupported admin operation status.")
         };
+
+    private async Task TrySendApprovalEmailAsync(
+        FarmAccountDto farm,
+        CancellationToken cancellationToken)
+    {
+        if (!emailService.IsConfigured || string.IsNullOrWhiteSpace(farm.OwnerEmail))
+        {
+            return;
+        }
+
+        try
+        {
+            await emailService.SendFarmApprovedAsync(
+                farm.OwnerEmail,
+                farm.OwnerName,
+                farm.Name,
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is SmtpException or InvalidOperationException)
+        {
+            logger.LogWarning(exception, "Approval email could not be sent for farm {FarmId}.", farm.Id);
+        }
+    }
 }
 
 public sealed class FarmAccountStatusRequest

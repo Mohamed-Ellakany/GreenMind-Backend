@@ -10,9 +10,14 @@ public sealed record PlatformStatisticsDto(
     int TotalExportPlans,
     int TotalTasks,
     IReadOnlyList<ExportPlanBreakdownDto> ExportPlansByCrop,
-    IReadOnlyList<ExportPlanBreakdownDto> ExportPlansByDestination);
+    IReadOnlyList<ExportPlanBreakdownDto> ExportPlansByDestination,
+    IReadOnlyList<NamedCountDto> FarmRegistrationsByMonth,
+    IReadOnlyList<NamedCountDto> ExportPlansByStatus,
+    IReadOnlyList<NamedCountDto> TasksByStatus);
 
 public sealed record ExportPlanBreakdownDto(
     int Id,
     string Name,
     int ExportPlanCount);
+
+public sealed record NamedCountDto(string Name, int Count);

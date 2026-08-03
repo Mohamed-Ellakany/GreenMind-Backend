@@ -15,6 +15,9 @@ namespace Greenmind.Domain.Consts.Enums
         QualityGrading,
         PesticideResidue,
         Phytosanitary,
-        DiseaseTreatment
+        DiseaseTreatment,
+        CropCalendar,
+        AgronomicGuidance,
+        ExportMarketRequirements
     }
 }

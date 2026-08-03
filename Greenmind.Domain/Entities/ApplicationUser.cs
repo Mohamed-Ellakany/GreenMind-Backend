@@ -15,5 +15,7 @@ namespace Greenmind.Domain.Entities
 
         public Farm? Farm { get; set; }
 
+        public ICollection<AdminInvitation> CreatedAdminInvitations { get; set; } = new List<AdminInvitation>();
+
     }
 }

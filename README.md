@@ -18,26 +18,37 @@ Run these commands from `GreenMind-Backend`:
 dotnet restore
 dotnet dev-certs https --trust
 dotnet user-secrets set --project Greenmind.Api "Jwt:Key" "replace-with-a-random-secret-at-least-32-characters-long"
+dotnet user-secrets set --project Greenmind.Api "ScheduleAnalysis:SigningKey" "replace-with-an-independent-random-secret-at-least-32-characters-long"
 dotnet user-secrets set --project Greenmind.Api "Weather:BaseUrl" "https://api.weatherapi.com/v1/"
 dotnet user-secrets set --project Greenmind.Api "Weather:ApiKey" "YOUR_WEATHER_API_KEY"
 dotnet user-secrets set --project Greenmind.Api "iti:ApiKey" "YOUR_SBG_API_KEY"
 dotnet user-secrets set --project Greenmind.Api "iti:Model" "anthropic.claude-sonnet-4-6"
+dotnet user-secrets set --project Greenmind.Api "iti:VisionModel" "anthropic.claude-haiku-4-5-20251001-v1:0"
+dotnet user-secrets set --project Greenmind.Api "Smtp:UserName" "YOUR_MAILERSEND_SMTP_USERNAME"
+dotnet user-secrets set --project Greenmind.Api "Smtp:Password" "YOUR_MAILERSEND_SMTP_PASSWORD"
 dotnet ef database update --project Greenmind.Infrastructure --startup-project Greenmind.Api
 ```
 
-Do not commit API keys. They are stored in .NET user secrets outside the repository.
-The chat gateway requires `iti:ApiKey`; without it, failed chat requests are recorded in
-the application log with the gateway status and response.
+Alternatively, set the gateway key in the environment as `SBG_API_KEY`. Do not commit API
+keys. The chat gateway requires one of these values; without it, failed chat requests are
+recorded in the application log with the gateway status and response.
+
+Admin invitations use MailerSend's SMTP relay on port 587 with STARTTLS. The sender in
+`Greenmind.Api/appsettings.json` must belong to a verified MailerSend domain. Keep the
+SMTP username and password in user secrets locally, or provide them in deployment as
+`Smtp__UserName` and `Smtp__Password` environment variables.
+
+MailerSend trial accounts can send to only two recipient addresses. To invite arbitrary
+administrators, complete account approval and use your own verified sending domain.
 
 Serilog writes application and HTTP request events to the SQL Server `Logs` table created
 by the `AddSerilogLogs` EF migration. It uses `ConnectionStrings:online` when that value
 is non-empty, otherwise it uses `ConnectionStrings:DefaultConnection`.
 
-Claude Sonnet 4.6 is the default for chat, planning, task proposals, and disease-image
-analysis. Titan Text Embeddings v2 remains the regulatory RAG embedding model because
-Claude does not produce embedding vectors. After switching from the former GitHub
-embedding model, re-upload the compliance source documents so their stored vectors are
-regenerated with Titan.
+Claude Sonnet 4.6 is the default for user chat, while Claude Haiku 4.5 is used for
+disease-image analysis. OpenAI GPT-OSS 120B handles structured planning and task
+proposals. Compliance retrieval uses text ranking because the approved OpenAI and
+Anthropic models do not provide embeddings.
 
 ## Run
 
@@ -66,6 +77,12 @@ Creating an export plan saves it immediately with planning state `Pending`. A ba
 - a live seven-day weather forecast.
 
 It asks the AI planner for tasks from tomorrow through the next seven days, validates and deduplicates them, then saves them. Planning status can be read from `GET /api/farm-owner/export-plans/{id}/planning-status`; a failed job can be retried with `POST /api/farm-owner/export-plans/{id}/planning/retry`.
+
+## Coordinate-based schedule analysis
+
+Before an export plan can be created, call `POST /api/farm-owner/export-plans/schedule-analysis` with the crop, destination, farm details, and exact `latitude`/`longitude`. The service uses the coordinates—not the city name—for NASA POWER climate data and returns proposed dates, feasibility, confidence, official sources, AI-inferred facts, and a short-lived signed `analysisToken`.
+
+Send that token unchanged when creating the plan. Moving the map marker, changing plan inputs, or editing dates requires a new analysis. Plans assessed as risky, not recommended, or low-confidence also require `acceptScheduleWarnings: true`. `city` and `governorate` remain display/search metadata only and are never used as weather-query inputs.
 
 ## Test
 

@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Serilog;
 using Serilog.Sinks.MSSqlServer;
+using Greenmind.Api.Services;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -41,6 +42,7 @@ namespace Greenmind.Api
 
 
             // Add services to the container.
+            builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
 
             // Files under this root are private application data. The app intentionally
             // does not enable static-file middleware; authorized controllers stream them.

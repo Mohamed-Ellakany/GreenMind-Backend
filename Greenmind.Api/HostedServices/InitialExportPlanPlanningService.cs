@@ -21,7 +21,7 @@ public sealed class InitialExportPlanPlanningService(
     {
         try
         {
-            await RecoverStaleJobsAsync(stoppingToken);
+            await RecoverJobsAsync(stoppingToken);
 
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), timeProvider);
             while (!stoppingToken.IsCancellationRequested)
@@ -104,6 +104,27 @@ public sealed class InitialExportPlanPlanningService(
             await using var failureScope = scopeFactory.CreateAsyncScope();
             var db = failureScope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
             var plan = await db.ExportPlans.SingleAsync(item => item.Id == exportPlanId, cancellationToken);
+            var persistedTaskCount = await CountInitialTasksAsync(db, plan, cancellationToken);
+
+            // A second planner may have committed the tasks before this worker observed
+            // a uniqueness conflict or another post-persistence failure. In that case the
+            // durable result is authoritative and the job must not be shown as failed.
+            if (persistedTaskCount > 0)
+            {
+                plan.PlanningStatus = PlanningGenerationStatus.Succeeded;
+                plan.PlanningCompletedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+                plan.NextPlanningAttemptAtUtc = null;
+                plan.GeneratedTaskCount = persistedTaskCount;
+                plan.PlanningFailureMessage = null;
+                await db.SaveChangesAsync(cancellationToken);
+                logger.LogWarning(
+                    exception,
+                    "Initial AI planning for export plan {ExportPlanId} raised an error after {TaskCount} tasks were persisted; the job was reconciled as succeeded.",
+                    exportPlanId,
+                    persistedTaskCount);
+                return;
+            }
+
             var exhausted = plan.PlanningAttemptCount >= RetryDelays.Length;
             plan.PlanningStatus = exhausted
                 ? PlanningGenerationStatus.Failed
@@ -120,26 +141,74 @@ public sealed class InitialExportPlanPlanningService(
         }
     }
 
-    private async Task RecoverStaleJobsAsync(CancellationToken cancellationToken)
+    private async Task RecoverJobsAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
         var cutoff = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-10);
-        var stale = await db.ExportPlans
+        var unfinished = await db.ExportPlans
             .Where(plan =>
-                plan.PlanningStatus == PlanningGenerationStatus.InProgress &&
-                plan.PlanningStartedAtUtc < cutoff)
+                plan.PlanningStatus == PlanningGenerationStatus.Failed ||
+                plan.GeneratedTaskCount > 0 ||
+                (plan.PlanningStatus == PlanningGenerationStatus.InProgress &&
+                 plan.PlanningStartedAtUtc < cutoff))
             .ToListAsync(cancellationToken);
 
-        foreach (var plan in stale)
+        var changed = false;
+        foreach (var plan in unfinished)
         {
-            plan.PlanningStatus = PlanningGenerationStatus.Pending;
-            plan.NextPlanningAttemptAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+            var persistedTaskCount = await CountInitialTasksAsync(db, plan, cancellationToken);
+            if (persistedTaskCount > 0)
+            {
+                plan.PlanningStatus = PlanningGenerationStatus.Succeeded;
+                plan.PlanningCompletedAtUtc ??= timeProvider.GetUtcNow().UtcDateTime;
+                plan.NextPlanningAttemptAtUtc = null;
+                plan.GeneratedTaskCount = persistedTaskCount;
+                plan.PlanningFailureMessage = null;
+                changed = true;
+                continue;
+            }
+
+            if (plan.PlanningStatus == PlanningGenerationStatus.InProgress &&
+                plan.PlanningStartedAtUtc < cutoff)
+            {
+                plan.PlanningStatus = PlanningGenerationStatus.Pending;
+                plan.NextPlanningAttemptAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+                changed = true;
+            }
         }
 
-        if (stale.Count > 0)
+        if (changed)
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private DateOnly InitialPlanningStartDate() =>
+        DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(1);
+
+    private async Task<int> CountInitialTasksAsync(
+        GreenmindDbContext db,
+        Greenmind.Domain.Entities.ExportPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var start = InitialPlanningStartDate();
+        var sevenDayHorizon = start.AddDays(6);
+        var end = plan.ExpectedExportDate < sevenDayHorizon
+            ? plan.ExpectedExportDate
+            : sevenDayHorizon;
+
+        if (end < start)
+        {
+            return 0;
+        }
+
+        return await db.FarmTasks
+            .AsNoTracking()
+            .CountAsync(task =>
+                task.ExportPlanId == plan.Id &&
+                task.PlannedDate >= start &&
+                task.PlannedDate <= end,
+                cancellationToken);
     }
 }
