@@ -32,11 +32,12 @@ public sealed class ExportPlanDashboardApiTests(GreenmindApiFactory factory)
         Assert.Equal("Germany", dashboard.ExportPlan.Destination);
         Assert.NotNull(dashboard.LatestSoilMeasurement);
         Assert.Equal(7.1, dashboard.LatestSoilMeasurement!.Ph, precision: 3);
-        Assert.Equal(3, dashboard.TaskSummary.Total);
-        Assert.Equal(1, dashboard.TaskSummary.Pending);
+        Assert.Equal(4, dashboard.TaskSummary.Total);
+        Assert.Equal(2, dashboard.TaskSummary.Pending);
         Assert.Equal(1, dashboard.TaskSummary.InProgress);
         Assert.Equal(1, dashboard.TaskSummary.Completed);
         Assert.Contains(dashboard.UpcomingTasks, task => task.Title == "Upcoming irrigation");
+        Assert.Contains(dashboard.OverdueTasks, task => task.Title == "Overdue inspection");
         Assert.Contains(dashboard.CompletedTasks, task => task.Title == "Completed soil test");
         Assert.True(dashboard.Season.CurrentSeasonDay > 0);
         Assert.True(dashboard.Season.ProgressPercentage > 0m);
@@ -125,6 +126,15 @@ public sealed class ExportPlanDashboardApiTests(GreenmindApiFactory factory)
                 PlannedDate = today.AddDays(1),
                 Status = DomainTaskStatus.InProgress,
                 Priority = TaskPriority.Medium
+            },
+            new FarmTask
+            {
+                ExportPlanId = exportPlan.Id,
+                TaskTypeId = 3,
+                Title = "Overdue inspection",
+                PlannedDate = today.AddDays(-1),
+                Status = DomainTaskStatus.Pending,
+                Priority = TaskPriority.Critical
             },
             new FarmTask
             {
