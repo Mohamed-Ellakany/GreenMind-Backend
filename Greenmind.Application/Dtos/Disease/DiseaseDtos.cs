@@ -19,6 +19,11 @@ public sealed record DiseaseImageDto(
     string ContentType,
     long FileSize);
 
+public sealed record DiseaseImageDownload(
+    byte[] Content,
+    string ContentType,
+    string FileName);
+
 public sealed record DiseaseReportDto(
     int Id,
     int ExportPlanId,

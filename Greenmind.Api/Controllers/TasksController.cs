@@ -26,10 +26,19 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] TaskQueryParams query)
     {
         var userFarmIdClaim = User.FindFirst("farmId")?.Value;
-        if (string.IsNullOrEmpty(userFarmIdClaim) && !User.IsInRole(RoleNames.Admin))
-            return Forbid();
-
-        var farmId = userFarmIdClaim is null ? (int?)null : int.Parse(userFarmIdClaim);
+        int? farmId = int.TryParse(userFarmIdClaim, out var claimedFarmId)
+            ? claimedFarmId
+            : null;
+        if (!User.IsInRole(RoleNames.Admin) && !farmId.HasValue)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            farmId = await _db.Farms
+                .Where(farm => farm.OwnerUserId == userId)
+                .Select(farm => (int?)farm.Id)
+                .SingleOrDefaultAsync();
+            if (!farmId.HasValue)
+                return Forbid();
+        }
 
         var q = _db.FarmTasks
             .Include(t => t.TaskType)
@@ -40,6 +49,9 @@ public class TasksController : ControllerBase
         {
             q = q.Where(t => t.ExportPlan.FarmId == farmId);
         }
+
+        if (query.ExportPlanId.HasValue)
+            q = q.Where(t => t.ExportPlanId == query.ExportPlanId.Value);
 
         if (query.TaskTypeId.HasValue)
             q = q.Where(t => t.TaskTypeId == query.TaskTypeId.Value);

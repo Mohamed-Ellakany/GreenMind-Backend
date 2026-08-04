@@ -27,6 +27,7 @@ namespace Greenmind.Api
     {
         public static void Main(string[] args)
         {
+            QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddCors(options =>

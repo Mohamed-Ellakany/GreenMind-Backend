@@ -47,6 +47,19 @@ public sealed class DiseaseAndAttachmentApiTests(GreenmindApiFactory factory)
         Assert.NotNull(submitted?.Data);
         Assert.Equal(DiseaseAnalysisStatus.Waiting, submitted!.Data!.Status);
 
+        var imageId = Assert.Single(submitted.Data.Images).Id;
+        var imageDownload = await ownerClient.GetAsync(
+            $"/api/export-plans/{planId}/disease-reports/{submitted.Data.Id}/images/{imageId}");
+        Assert.Equal(HttpStatusCode.OK, imageDownload.StatusCode);
+        Assert.Equal("image/png", imageDownload.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(ValidPngBytes(), await imageDownload.Content.ReadAsByteArrayAsync());
+        Assert.True(imageDownload.Headers.CacheControl?.Private);
+        Assert.True(imageDownload.Headers.CacheControl?.NoStore);
+
+        var crossTenantImageDownload = await otherOwnerClient.GetAsync(
+            $"/api/export-plans/{planId}/disease-reports/{submitted.Data.Id}/images/{imageId}");
+        Assert.Equal(HttpStatusCode.NotFound, crossTenantImageDownload.StatusCode);
+
         var crossTenantResponse = await otherOwnerClient.GetAsync(
             $"/api/export-plans/{planId}/disease-reports");
         Assert.Equal(HttpStatusCode.NotFound, crossTenantResponse.StatusCode);

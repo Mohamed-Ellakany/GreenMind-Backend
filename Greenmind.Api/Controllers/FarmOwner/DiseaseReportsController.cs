@@ -84,6 +84,31 @@ public sealed class DiseaseReportsController(
         return Map(result);
     }
 
+    [HttpGet("{reportId:int}/images/{imageId:int}")]
+    public async Task<IActionResult> DownloadImage(
+        int exportPlanId,
+        int reportId,
+        int imageId,
+        CancellationToken cancellationToken)
+    {
+        var result = await diseaseService.DownloadImageAsync(
+            exportPlanId,
+            reportId,
+            imageId,
+            GetOwnerUserId(),
+            cancellationToken);
+        if (result.Status == DiseaseOperationStatus.NotFound)
+            return NotFound();
+
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(
+            result.Value!.Content,
+            result.Value.ContentType,
+            result.Value.FileName,
+            enableRangeProcessing: true);
+    }
+
     [HttpPost("{reportId:int}/retry")]
     public async Task<ActionResult<DiseaseReportDto>> Retry(
         int exportPlanId,
