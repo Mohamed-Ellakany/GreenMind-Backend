@@ -90,6 +90,31 @@ public sealed class ConversationAiServiceTests
         Assert.DoesNotContain("60207-90-1", reply);
     }
 
+    [Fact]
+    public async Task PesticideDecision_FindsWorkbookSubstanceWithoutHardCodedAlias()
+    {
+        var request = new ConversationAiRequest(
+            ChatScope.ExportPlan,
+            "اختبار",
+            "هل المادة الفعالة Propanocarb معتمدة وينفع استخدامها؟",
+            """{"plan":{"crop":"Strawberry","destination":"European Union"}}""",
+            null,
+            []);
+        var service = new ConversationAiService(
+            new ModelMustNotBeCalled(),
+            new RegulatoryKnowledgeStub());
+        var chunks = new List<string>();
+
+        await foreach (var chunk in service.StreamReplyAsync(request))
+            chunks.Add(chunk);
+
+        var reply = string.Concat(chunks);
+        Assert.Contains("Propanocarb", reply);
+        Assert.Contains("24579-73-5", reply);
+        Assert.Contains("معتمد", reply);
+        Assert.Contains("موجودة", reply);
+    }
+
     private static ConversationAiRequest BuildRequest(
         string userMessage,
         params ConversationHistoryItem[] recentMessages) =>
@@ -103,6 +128,28 @@ public sealed class ConversationAiServiceTests
 
     private sealed class RegulatoryKnowledgeStub : IRegulatoryKnowledgeQueryService
     {
+        public Task<IReadOnlyList<ActiveSubstanceKnowledgeDto>> FindActiveSubstancesMentionedAsync(
+            string regionName,
+            string text,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ActiveSubstanceKnowledgeDto>>(
+                text.Contains("Propanocarb", StringComparison.OrdinalIgnoreCase)
+                    ?
+                    [
+                        new(
+                            67,
+                            regionName,
+                            "Propanocarb",
+                            "24579-73-5",
+                            "معتمد",
+                            null,
+                            null,
+                            null,
+                            null,
+                            null)
+                    ]
+                    : []);
+
         public Task<IReadOnlyList<ActiveSubstanceKnowledgeDto>> FindActiveSubstancesAsync(
             string regionName,
             string nameOrCasOrId,

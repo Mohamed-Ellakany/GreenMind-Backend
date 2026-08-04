@@ -161,6 +161,32 @@ public sealed class RegulatoryDataApiTests(GreenmindApiFactory factory)
     }
 
     [Fact]
+    public async Task ActiveSubstanceMentionedInQuestion_IsReadFromRegulatoryData()
+    {
+        var region = await AddDestinationAsync();
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+        context.ActiveSubstances.Add(new ActiveSubstance
+        {
+            RegionName = region,
+            ExternalId = 67,
+            Name = "Propanocarb",
+            CasNumber = "24579-73-5",
+            ApprovalStatus = ActiveSubstanceApprovalStatus.معتمد
+        });
+        await context.SaveChangesAsync();
+
+        var knowledge = scope.ServiceProvider.GetRequiredService<IRegulatoryKnowledgeQueryService>();
+        var result = Assert.Single(await knowledge.FindActiveSubstancesMentionedAsync(
+            region,
+            "هل المادة الفعالة Propanocarb معتمدة للتصدير؟"));
+
+        Assert.Equal(67, result.ExternalId);
+        Assert.Equal("24579-73-5", result.CasNumber);
+        Assert.Equal("معتمد", result.ApprovalStatus);
+    }
+
+    [Fact]
     public async Task InvalidWorkbook_IsRejectedWithoutReplacingCurrentData()
     {
         var region = await AddDestinationAsync();

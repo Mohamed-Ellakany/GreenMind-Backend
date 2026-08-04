@@ -9,6 +9,11 @@ public interface IRegulatoryKnowledgeQueryService
         string nameOrCasOrId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ActiveSubstanceKnowledgeDto>> FindActiveSubstancesMentionedAsync(
+        string regionName,
+        string text,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ProductMrlKnowledgeDto>> FindProductMrlsAsync(
         string regionName,
         string productType,

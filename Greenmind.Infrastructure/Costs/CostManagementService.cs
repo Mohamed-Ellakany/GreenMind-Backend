@@ -256,7 +256,6 @@ public sealed class CostManagementService(
             return validation.Error;
 
         expense.ExpenseCategoryId = request.ExpenseCategoryId;
-        expense.ExpenseCategory = validation.Category!;
         expense.TaskId = request.TaskId;
         expense.ExpenseDate = request.ExpenseDate;
         expense.Description = request.Description.Trim();
@@ -269,6 +268,10 @@ public sealed class CostManagementService(
         expense.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         expense.RecalculateAmount();
         await dbContext.SaveChangesAsync(cancellationToken);
+        // The validated category is intentionally assigned after saving. It was
+        // loaded without tracking and assigning it earlier can conflict with the
+        // category entity already tracked through the expense navigation.
+        expense.ExpenseCategory = validation.Category!;
 
         return CostOperationResult<ExpenseDto>.Success(MapExpense(expense));
     }

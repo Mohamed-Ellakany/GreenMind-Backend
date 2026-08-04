@@ -146,6 +146,101 @@ public sealed class CostManagementApiTests(GreenmindApiFactory factory)
     }
 
     [Fact]
+    public async Task Expense_CanBeUpdatedWithoutChangingItsCategory()
+    {
+        var seeded = await SeedPlanAndCategoryAsync();
+        var ownerClient = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var createResponse = await ownerClient.PostAsJsonAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses",
+            BuildExpenseRequest(seeded.CategoryId),
+            JsonOptions);
+        var created = await createResponse.Content
+            .ReadFromJsonAsync<ApiResponse<ExpenseDto>>(JsonOptions);
+
+        var updatedRequest = BuildExpenseRequest(seeded.CategoryId);
+        updatedRequest = new ExpenseRequest
+        {
+            ExpenseCategoryId = seeded.CategoryId,
+            ExpenseDate = updatedRequest.ExpenseDate,
+            Description = "أسمدة محدثة",
+            Supplier = "المورد الجديد",
+            Quantity = 5m,
+            UnitPrice = 10m,
+            PaymentMethod = ExpensePaymentMethod.Cash,
+            Notes = "تمت المراجعة"
+        };
+
+        var response = await ownerClient.PutAsJsonAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses/{created!.Data!.Id}",
+            updatedRequest,
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content
+            .ReadFromJsonAsync<ApiResponse<ExpenseDto>>(JsonOptions);
+        Assert.Equal("أسمدة محدثة", updated?.Data?.Description);
+        Assert.Equal(50m, updated?.Data?.Amount);
+        Assert.Equal(seeded.CategoryId, updated?.Data?.ExpenseCategory.Id);
+    }
+
+    [Fact]
+    public async Task Expense_CanBeUpdatedAndMovedToAnotherOwnedCategory()
+    {
+        var seeded = await SeedPlanAndCategoryAsync();
+        int replacementCategoryId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+            var farmId = await dbContext.ExportPlans
+                .Where(item => item.Id == seeded.PlanId)
+                .Select(item => item.FarmId)
+                .SingleAsync();
+            var replacementCategory = new ExpenseCategory
+            {
+                FarmId = farmId,
+                Name = $"Replacement category {Guid.NewGuid():N}",
+                IsDefault = false
+            };
+            dbContext.ExpenseCategories.Add(replacementCategory);
+            await dbContext.SaveChangesAsync();
+            replacementCategoryId = replacementCategory.Id;
+        }
+
+        var ownerClient = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var createResponse = await ownerClient.PostAsJsonAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses",
+            BuildExpenseRequest(seeded.CategoryId),
+            JsonOptions);
+        var created = await createResponse.Content
+            .ReadFromJsonAsync<ApiResponse<ExpenseDto>>(JsonOptions);
+
+        var updateRequest = BuildExpenseRequest(replacementCategoryId);
+        updateRequest = new ExpenseRequest
+        {
+            ExpenseCategoryId = replacementCategoryId,
+            ExpenseDate = updateRequest.ExpenseDate,
+            Description = updateRequest.Description,
+            Supplier = updateRequest.Supplier,
+            Quantity = 0.5m,
+            UnitPrice = 40m,
+            PaymentMethod = updateRequest.PaymentMethod,
+            Notes = updateRequest.Notes
+        };
+
+        var response = await ownerClient.PutAsJsonAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses/{created!.Data!.Id}",
+            updateRequest,
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content
+            .ReadFromJsonAsync<ApiResponse<ExpenseDto>>(JsonOptions);
+        Assert.Equal(replacementCategoryId, updated?.Data?.ExpenseCategory.Id);
+        Assert.Equal(0.5m, updated?.Data?.Quantity);
+        Assert.Equal(20m, updated?.Data?.Amount);
+    }
+
+    [Fact]
     public async Task DashboardAndCsv_ExcludeDeletedExpenses_AndEscapeFormulas()
     {
         var seeded = await SeedPlanAndCategoryAsync();
@@ -198,6 +293,57 @@ public sealed class CostManagementApiTests(GreenmindApiFactory factory)
         Assert.Contains("التاريخ,الفئة,الوصف", csv);
         Assert.Contains("'=1+1", csv);
         Assert.DoesNotContain("شراء مستلزمات زراعية", csv);
+    }
+
+    [Fact]
+    public async Task FinancialPdfReport_ExportsForOwnedPlanAndSelectedCategory()
+    {
+        var seeded = await SeedPlanAndCategoryAsync();
+        var ownerClient = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        await ownerClient.PostAsJsonAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses",
+            BuildExpenseRequest(seeded.CategoryId),
+            JsonOptions);
+        for (var index = 1; index <= 18; index++)
+        {
+            var createResponse = await ownerClient.PostAsJsonAsync(
+                $"/api/export-plans/{seeded.PlanId}/expenses",
+                new ExpenseRequest
+                {
+                    ExpenseCategoryId = seeded.CategoryId,
+                    ExpenseDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-index)),
+                    Description = $"مصروف تشغيل زراعي رقم {index} مع وصف تفصيلي للتحقق من التفاف النص داخل الجدول",
+                    Supplier = $"المورد الزراعي رقم {index}",
+                    Quantity = index + 1,
+                    UnitPrice = 75.50m,
+                    PaymentMethod = (ExpensePaymentMethod)(index % 4 + 1),
+                    Notes = "بيانات اختبار تقرير المصروفات متعدد الصفحات"
+                },
+                JsonOptions);
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        }
+
+        var response = await ownerClient.GetAsync(
+            $"/api/farm-owner/reports/export?format=pdf&sections=spending&exportPlanId={seeded.PlanId}&expenseCategoryId={seeded.CategoryId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/pdf", response.Content.Headers.ContentType?.MediaType);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.True(bytes.Length > 20_000);
+        Assert.Equal("%PDF-", System.Text.Encoding.ASCII.GetString(bytes, 0, 5));
+        Assert.Contains("%%EOF", System.Text.Encoding.ASCII.GetString(bytes[^64..]));
+        Assert.Contains("greenmind-expenses-report-", response.Content.Headers.ContentDisposition?.ToString());
+
+    }
+
+    [Fact]
+    public async Task FinancialPdfReport_RejectsAnInvertedDateRange()
+    {
+        var ownerClient = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var response = await ownerClient.GetAsync(
+            "/api/farm-owner/reports/export?format=pdf&sections=spending&from=2026-08-02&to=2026-08-01");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     private async Task<(int PlanId, int CategoryId)> SeedPlanAndCategoryAsync(

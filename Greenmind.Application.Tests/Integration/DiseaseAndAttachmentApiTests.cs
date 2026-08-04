@@ -153,6 +153,36 @@ public sealed class DiseaseAndAttachmentApiTests(GreenmindApiFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
     }
 
+    [Fact]
+    public async Task ExpenseAttachment_CanBeDeletedByItsOwner()
+    {
+        var seeded = await SeedExpenseAsync();
+        var ownerClient = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(
+            new StringContent(ExpenseAttachmentType.Receipt.ToArabic()),
+            "AttachmentType");
+        var fileContent = new ByteArrayContent("%PDF-1.7\nreceipt to delete"u8.ToArray());
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        multipart.Add(fileContent, "File", "delete-me.pdf");
+
+        var uploadResponse = await ownerClient.PostAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses/{seeded.ExpenseId}/attachments",
+            multipart);
+        var uploaded = await uploadResponse.Content
+            .ReadFromJsonAsync<ApiResponse<ExpenseAttachmentDto>>(JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, uploadResponse.StatusCode);
+        Assert.NotNull(uploaded?.Data);
+
+        var deleteResponse = await ownerClient.DeleteAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses/{seeded.ExpenseId}/attachments/{uploaded!.Data!.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        var afterDelete = await ownerClient.GetAsync(
+            $"/api/export-plans/{seeded.PlanId}/expenses/{seeded.ExpenseId}/attachments/{uploaded.Data.Id}/download");
+        Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
+    }
+
     private async Task<int> SeedPlanAsync()
     {
         using var scope = factory.Services.CreateScope();
