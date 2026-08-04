@@ -23,6 +23,13 @@ public interface IDiseaseReportService
         string ownerUserId,
         CancellationToken cancellationToken = default);
 
+    Task<DiseaseOperationResult<DiseaseImageDownload>> DownloadImageAsync(
+        int exportPlanId,
+        int reportId,
+        int imageId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default);
+
     Task<DiseaseOperationResult<DiseaseReportDto>> RetryAsync(
         int exportPlanId,
         int reportId,

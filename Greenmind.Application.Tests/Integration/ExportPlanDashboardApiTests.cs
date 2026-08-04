@@ -32,11 +32,12 @@ public sealed class ExportPlanDashboardApiTests(GreenmindApiFactory factory)
         Assert.Equal("Germany", dashboard.ExportPlan.Destination);
         Assert.NotNull(dashboard.LatestSoilMeasurement);
         Assert.Equal(7.1, dashboard.LatestSoilMeasurement!.Ph, precision: 3);
-        Assert.Equal(3, dashboard.TaskSummary.Total);
-        Assert.Equal(1, dashboard.TaskSummary.Pending);
+        Assert.Equal(4, dashboard.TaskSummary.Total);
+        Assert.Equal(2, dashboard.TaskSummary.Pending);
         Assert.Equal(1, dashboard.TaskSummary.InProgress);
         Assert.Equal(1, dashboard.TaskSummary.Completed);
         Assert.Contains(dashboard.UpcomingTasks, task => task.Title == "Upcoming irrigation");
+        Assert.Contains(dashboard.OverdueTasks, task => task.Title == "Overdue inspection");
         Assert.Contains(dashboard.CompletedTasks, task => task.Title == "Completed soil test");
         Assert.True(dashboard.Season.CurrentSeasonDay > 0);
         Assert.True(dashboard.Season.ProgressPercentage > 0m);
@@ -51,6 +52,64 @@ public sealed class ExportPlanDashboardApiTests(GreenmindApiFactory factory)
         var response = await client.GetAsync($"/api/farm-owner/export-plans/{exportPlanId}/dashboard");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Tasks_FilterByExportPlan_AndNeverLeakAnotherPlan()
+    {
+        var requestedPlanId = await CreateExportPlanWithDashboardDataAsync();
+        int otherPlanId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+            var farm = await dbContext.Farms.SingleAsync(item =>
+                item.OwnerUserId == GreenmindApiFactory.FarmOwnerUserId);
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var otherPlan = new ExportPlan
+            {
+                FarmId = farm.Id,
+                CropId = 1,
+                DestinationId = 1,
+                Name = $"Other plan {Guid.NewGuid():N}",
+                Governorate = "Giza",
+                City = "Giza",
+                AreaInFeddan = 2,
+                Latitude = 30,
+                Longitude = 31,
+                PlantingDate = today,
+                ExpectedHarvestDate = today.AddDays(60),
+                ExpectedExportDate = today.AddDays(70),
+                Status = ExportPlanStatus.InProgress
+            };
+            dbContext.ExportPlans.Add(otherPlan);
+            await dbContext.SaveChangesAsync();
+            otherPlanId = otherPlan.Id;
+            dbContext.FarmTasks.Add(new FarmTask
+            {
+                ExportPlanId = otherPlan.Id,
+                TaskTypeId = 1,
+                Title = "Must not appear",
+                PlannedDate = today,
+                Status = DomainTaskStatus.Pending,
+                Priority = TaskPriority.High
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        using var ownerClient = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var response = await ownerClient.GetAsync($"/api/Tasks?exportPlanId={requestedPlanId}&pageSize=100");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var tasks = await ReadDataAsync<List<JsonElement>>(response);
+        Assert.NotEmpty(tasks);
+        Assert.All(tasks, task => Assert.Equal(requestedPlanId, task.GetProperty("exportPlanId").GetInt32()));
+        Assert.DoesNotContain(tasks, task =>
+            task.GetProperty("exportPlanId").GetInt32() == otherPlanId ||
+            task.GetProperty("title").GetString() == "Must not appear");
+
+        using var otherOwnerClient = CreateFarmOwnerClient(GreenmindApiFactory.OtherFarmOwnerUserId);
+        var otherOwnerResponse = await otherOwnerClient.GetAsync($"/api/Tasks?exportPlanId={requestedPlanId}&pageSize=100");
+        var otherOwnerTasks = await ReadDataAsync<List<JsonElement>>(otherOwnerResponse);
+        Assert.Empty(otherOwnerTasks);
     }
 
     private async Task<int> CreateExportPlanWithDashboardDataAsync()
@@ -125,6 +184,15 @@ public sealed class ExportPlanDashboardApiTests(GreenmindApiFactory factory)
                 PlannedDate = today.AddDays(1),
                 Status = DomainTaskStatus.InProgress,
                 Priority = TaskPriority.Medium
+            },
+            new FarmTask
+            {
+                ExportPlanId = exportPlan.Id,
+                TaskTypeId = 3,
+                Title = "Overdue inspection",
+                PlannedDate = today.AddDays(-1),
+                Status = DomainTaskStatus.Pending,
+                Priority = TaskPriority.Critical
             },
             new FarmTask
             {

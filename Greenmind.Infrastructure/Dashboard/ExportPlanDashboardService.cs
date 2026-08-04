@@ -90,6 +90,25 @@ public sealed class ExportPlanDashboardService(
                 task.Priority))
             .ToListAsync(cancellationToken);
 
+        var overdueTasks = await dbContext.FarmTasks
+            .AsNoTracking()
+            .Where(task =>
+                task.ExportPlanId == exportPlanId &&
+                (task.Status == DomainTaskStatus.Pending || task.Status == DomainTaskStatus.InProgress) &&
+                task.PlannedDate < today)
+            .OrderByDescending(task => task.Priority)
+            .ThenBy(task => task.PlannedDate)
+            .Take(DashboardTaskLimit)
+            .Select(task => new DashboardTaskProjection(
+                task.Id,
+                task.Title,
+                task.TaskType.Name,
+                task.PlannedDate,
+                task.ActualDate,
+                task.Status,
+                task.Priority))
+            .ToListAsync(cancellationToken);
+
         var completedTasks = await dbContext.FarmTasks
             .AsNoTracking()
             .Where(task => task.ExportPlanId == exportPlanId && task.Status == DomainTaskStatus.Completed)
@@ -122,6 +141,7 @@ public sealed class ExportPlanDashboardService(
             seasonCalculationService.Calculate(plan.PlantingDate, plan.ExpectedHarvestDate, today),
             latestSoilMeasurement,
             taskSummary,
+            overdueTasks.Select(MapTask).ToList(),
             upcomingTasks.Select(MapTask).ToList(),
             completedTasks.Select(MapTask).ToList());
     }

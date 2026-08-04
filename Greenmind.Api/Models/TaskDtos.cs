@@ -5,6 +5,7 @@ namespace Greenmind.Api.Models;
 
 public class TaskQueryParams
 {
+    public int? ExportPlanId { get; set; }
     public string? Status { get; set; }
     public int? Priority { get; set; }
     public int? TaskTypeId { get; set; }

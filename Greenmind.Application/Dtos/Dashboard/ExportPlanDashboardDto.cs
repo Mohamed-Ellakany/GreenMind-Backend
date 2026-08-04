@@ -5,6 +5,7 @@ public sealed record ExportPlanDashboardDto(
     SeasonProgressDto Season,
     SoilMeasurementDashboardDto? LatestSoilMeasurement,
     TaskSummaryDto TaskSummary,
+    IReadOnlyList<DashboardTaskDto> OverdueTasks,
     IReadOnlyList<DashboardTaskDto> UpcomingTasks,
     IReadOnlyList<DashboardTaskDto> CompletedTasks);
 

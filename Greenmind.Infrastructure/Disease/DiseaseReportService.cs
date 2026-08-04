@@ -164,6 +164,43 @@ public sealed class DiseaseReportService(
             : DiseaseOperationResult<DiseaseReportDto>.Success(Map(report));
     }
 
+    public async Task<DiseaseOperationResult<DiseaseImageDownload>> DownloadImageAsync(
+        int exportPlanId,
+        int reportId,
+        int imageId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var image = await dbContext.DiseaseImages
+            .AsNoTracking()
+            .Where(item =>
+                item.Id == imageId &&
+                item.DiseaseReportId == reportId &&
+                item.DiseaseReport.ExportPlanId == exportPlanId &&
+                item.DiseaseReport.ExportPlan.Farm.OwnerUserId == ownerUserId)
+            .Select(item => new
+            {
+                item.StorageKey,
+                item.ContentType,
+                item.OriginalFileName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (image is null)
+            return DiseaseOperationResult<DiseaseImageDownload>.NotFound();
+
+        await using var stream = await fileStorage.OpenReadAsync(
+            image.StorageKey,
+            cancellationToken);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+        return DiseaseOperationResult<DiseaseImageDownload>.Success(
+            new DiseaseImageDownload(
+                buffer.ToArray(),
+                image.ContentType,
+                image.OriginalFileName));
+    }
+
     public async Task<DiseaseOperationResult<DiseaseReportDto>> RetryAsync(
         int exportPlanId,
         int reportId,
