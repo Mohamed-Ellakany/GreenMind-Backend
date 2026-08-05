@@ -147,42 +147,39 @@ public sealed class ConversationAiService(
         if (!ContainsPesticideDecisionIntent(request.UserMessage))
             return null;
 
-        var substanceSearches = FindKnownActiveSubstances(request.UserMessage);
-        if (substanceSearches.Count == 0)
-        {
-            substanceSearches = request.RecentMessages
-                .Where(item => item.Role == ChatMessageRole.User)
-                .Reverse()
-                .Select(item => FindKnownActiveSubstances(item.Content))
-                .FirstOrDefault(items => items.Count > 0) ?? [];
-        }
-
-        if (substanceSearches.Count == 0 ||
-            !TryGetSingleRegulatoryContext(request.ContextJson, out var region, out var crop))
+        if (!TryGetSingleRegulatoryContext(request.ContextJson, out var region, out var crop))
         {
             return null;
         }
+
+        var substances = await FindMentionedActiveSubstancesAsync(
+            region,
+            request.UserMessage,
+            cancellationToken);
+        if (substances.Count == 0)
+        {
+            foreach (var item in request.RecentMessages
+                         .Where(item => item.Role == ChatMessageRole.User)
+                         .Reverse())
+            {
+                substances = await FindMentionedActiveSubstancesAsync(
+                    region,
+                    item.Content,
+                    cancellationToken);
+                if (substances.Count > 0)
+                    break;
+            }
+        }
+
+        if (substances.Count == 0)
+            return null;
 
         var regionLabel = ToArabicRegion(region);
         var cropLabel = ToArabicCrop(crop);
         var replyLines = new List<string>();
 
-        foreach (var substanceSearch in substanceSearches)
+        foreach (var substance in substances)
         {
-            var substances = await regulatoryQueryService.FindActiveSubstancesAsync(
-                region,
-                substanceSearch,
-                cancellationToken);
-            var substance = substances.FirstOrDefault();
-
-            if (substance is null)
-            {
-                replyLines.Add(
-                    $"لم أجد سجلًا للمادة الفعالة {substanceSearch} في قاعدة بيانات {regionLabel}. " +
-                    "ده لا يعني أنها مسموحة أو مرفوضة؛ يحتاج تحقق تنظيمي يدوي قبل الاستخدام.");
-                continue;
-            }
-
             var cas = string.IsNullOrWhiteSpace(substance.CasNumber)
                 ? string.Empty
                 : $"، ورقم CAS هو {substance.CasNumber}";
@@ -214,6 +211,36 @@ public sealed class ConversationAiService(
 
         return string.Join("\n", replyLines) +
                "\n\nملحوظة مهمة: اعتماد المادة الفعالة وحده لا يثبت اعتماد الاسم التجاري أو الجرعة أو توقيت التطبيق. راجع ملصق المنتج والجهة التنظيمية قبل أي استخدام فعلي.";
+    }
+
+    private async Task<IReadOnlyList<Greenmind.Application.Dtos.Regulatory.ActiveSubstanceKnowledgeDto>>
+        FindMentionedActiveSubstancesAsync(
+            string region,
+            string text,
+            CancellationToken cancellationToken)
+    {
+        var found = (await regulatoryQueryService.FindActiveSubstancesMentionedAsync(
+                region,
+                text,
+                cancellationToken))
+            .ToList();
+
+        // Arabic transliterations cannot be discovered from an English workbook name,
+        // so retain the small translation map only as a supplement to database matching.
+        foreach (var alias in FindKnownActiveSubstances(text))
+        {
+            var aliasMatches = await regulatoryQueryService.FindActiveSubstancesAsync(
+                region,
+                alias,
+                cancellationToken);
+            foreach (var match in aliasMatches)
+            {
+                if (found.All(item => item.ExternalId != match.ExternalId))
+                    found.Add(match);
+            }
+        }
+
+        return found;
     }
 
     private static bool ContainsPesticideDecisionIntent(string value)

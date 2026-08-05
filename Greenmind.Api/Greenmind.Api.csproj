@@ -29,4 +29,8 @@
     <ProjectReference Include="..\Greenmind.Infrastructure\Greenmind.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Fonts\*.ttf" />
+  </ItemGroup>
+
 </Project>
