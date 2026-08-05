@@ -365,7 +365,7 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.ToTable("ChatSessions", null, t =>
                         {
-                            t.HasCheckConstraint("CK_ChatSessions_Scope", "([Scope] = 1 AND [ExportPlanId] IS NOT NULL) OR ([Scope] = 2 AND [ExportPlanId] IS NULL)");
+                            t.HasCheckConstraint("CK_ChatSessions_Scope", "([Scope] IN (1, 3) AND [ExportPlanId] IS NOT NULL) OR ([Scope] = 2 AND [ExportPlanId] IS NULL)");
                         });
                 });
 
@@ -657,6 +657,9 @@ namespace Greenmind.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ChatMessageId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Checksum")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -688,6 +691,8 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ChatMessageId");
+
                     b.HasIndex("DiseaseReportId");
 
                     b.HasIndex("StorageKey")
@@ -712,12 +717,24 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("CaseFactsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("ChatSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<decimal?>("ConfidencePercentage")
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("ContextSnapshotJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -732,6 +749,16 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<bool>("FinalizedWithOverride")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("KnowledgeFailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("KnowledgeVerified")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ModelName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -745,6 +772,9 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<string>("PromptVersion")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ReadinessJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("RecommendedActions")
                         .HasColumnType("nvarchar(max)");
@@ -765,6 +795,10 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ChatSessionId")
+                        .IsUnique()
+                        .HasFilter("[ChatSessionId] IS NOT NULL");
+
                     b.HasIndex("Status", "CreatedAt");
 
                     b.HasIndex("ExportPlanId", "ObservationDate", "CreatedAt");
@@ -773,6 +807,61 @@ namespace Greenmind.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_DiseaseReports_Confidence", "[ConfidencePercentage] IS NULL OR ([ConfidencePercentage] >= 0 AND [ConfidencePercentage] <= 100)");
                         });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseReportSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DiseaseReportId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Excerpt")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("IsOfficialOrAcademic")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Publisher")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("RetrievedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SectionReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SourceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DiseaseReportId", "SourceUrl");
+
+                    b.ToTable("DiseaseReportSources", (string)null);
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Expense", b =>
@@ -1195,6 +1284,10 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1207,6 +1300,11 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TaskTypeId");
@@ -1214,7 +1312,10 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
                         .IsUnique();
 
-                    b.ToTable("FarmTasks");
+                    b.ToTable("FarmTasks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FarmTasks_Quantity", "[Quantity] > 0");
+                        });
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ProductMrl", b =>
@@ -1322,6 +1423,81 @@ namespace Greenmind.Infrastructure.Migrations
                     b.ToTable("SoilMeasurements");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.SupportConversation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FarmId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsClosed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("LastAdminReplyAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LastCustomerMessageAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastMessageAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .IsUnique()
+                        .HasFilter("[IsClosed] = 0");
+
+                    b.HasIndex("FarmId", "IsClosed", "LastMessageAtUtc");
+
+                    b.ToTable("SupportConversations", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.SupportMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SenderUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("SupportConversationId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.HasIndex("SupportConversationId", "CreatedAt", "Id");
+
+                    b.ToTable("SupportMessages", (string)null);
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
                 {
                     b.Property<int>("Id")
@@ -1365,7 +1541,9 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("SourceChatMessageId");
 
-                    b.HasIndex("SourceDiseaseReportId");
+                    b.HasIndex("SourceDiseaseReportId")
+                        .IsUnique()
+                        .HasFilter("[SourceDiseaseReportId] IS NOT NULL AND [Status] = 1");
 
                     b.HasIndex("ExportPlanId", "Status", "ExpiresAtUtc");
 
@@ -1388,6 +1566,11 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.Property<int?>("FarmTaskId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsIncluded")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("Operation")
                         .HasColumnType("int");
@@ -1711,24 +1894,49 @@ namespace Greenmind.Infrastructure.Migrations
 
             modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseImage", b =>
                 {
+                    b.HasOne("Greenmind.Domain.Entities.ChatMessage", "ChatMessage")
+                        .WithMany()
+                        .HasForeignKey("ChatMessageId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("Greenmind.Domain.Entities.DiseaseReport", "DiseaseReport")
                         .WithMany("Images")
                         .HasForeignKey("DiseaseReportId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("ChatMessage");
+
                     b.Navigation("DiseaseReport");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseReport", b =>
                 {
+                    b.HasOne("Greenmind.Domain.Entities.ChatSession", "ChatSession")
+                        .WithOne("DiagnosisReport")
+                        .HasForeignKey("Greenmind.Domain.Entities.DiseaseReport", "ChatSessionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
                         .WithMany("DiseaseReports")
                         .HasForeignKey("ExportPlanId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("ChatSession");
+
                     b.Navigation("ExportPlan");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.DiseaseReportSource", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.DiseaseReport", "DiseaseReport")
+                        .WithMany("Sources")
+                        .HasForeignKey("DiseaseReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DiseaseReport");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Expense", b =>
@@ -1907,6 +2115,36 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("ExportPlan");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.SupportConversation", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.Farm", "Farm")
+                        .WithMany("SupportConversations")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Farm");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.SupportMessage", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Greenmind.Domain.Entities.SupportConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("SupportConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Sender");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>
                 {
                     b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
@@ -2024,6 +2262,8 @@ namespace Greenmind.Infrastructure.Migrations
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ChatSession", b =>
                 {
+                    b.Navigation("DiagnosisReport");
+
                     b.Navigation("Messages");
                 });
 
@@ -2042,6 +2282,8 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("Images");
 
                     b.Navigation("Proposals");
+
+                    b.Navigation("Sources");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.Expense", b =>
@@ -2085,6 +2327,8 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("ExpenseCategories");
 
                     b.Navigation("ExportPlans");
+
+                    b.Navigation("SupportConversations");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
@@ -2092,6 +2336,11 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("Expenses");
 
                     b.Navigation("ProposalItems");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.SupportConversation", b =>
+                {
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.TaskChangeProposal", b =>

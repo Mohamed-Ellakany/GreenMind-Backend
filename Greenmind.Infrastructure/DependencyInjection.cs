@@ -28,6 +28,8 @@ using Greenmind.Application.Contracts.Storage;
 using Greenmind.Infrastructure.Storage;
 using Greenmind.Application.Contracts.Disease;
 using Greenmind.Infrastructure.Disease;
+using Greenmind.Application.Contracts.Support;
+using Greenmind.Infrastructure.Support;
 
 namespace Greenmind.Infrastructure;
 
@@ -73,6 +75,14 @@ public static class DependencyInjection
         services.AddScoped<IExpenseAttachmentService, ExpenseAttachmentService>();
         services.AddSingleton<IPrivateFileStorage, ServerPrivateFileStorage>();
         services.AddScoped<IDiseaseReportService, DiseaseReportService>();
+        services.AddScoped<IDiagnosisSessionService, DiagnosisSessionService>();
+        services.AddScoped<IDiagnosisConversationAiService, DiagnosisConversationAiService>();
+        services.AddScoped<ISupportService, SupportService>();
+        services.AddHttpClient<IDiagnosisKnowledgeProvider, TrustedDiagnosisKnowledgeProvider>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GreenMind-Diagnosis/1.0");
+        });
         services.AddSingleton<IDiseaseVisionAnalyzer, DiseaseVisionAnalyzer>();
 
         return services;

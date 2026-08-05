@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
+using System.Text;
 using Greenmind.Application.Contracts.Api;
 using Greenmind.Application.Contracts.Disease;
 using Greenmind.Application.Contracts.Storage;
 using Greenmind.Application.Dtos.Disease;
+using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
@@ -15,6 +17,7 @@ public sealed class DiseaseReportService(
     GreenmindDbContext dbContext,
     IPrivateFileStorage fileStorage,
     IDiseaseVisionAnalyzer visionAnalyzer,
+    IDiagnosisKnowledgeProvider knowledgeProvider,
     TimeProvider timeProvider,
     ILogger<DiseaseReportService> logger) : IDiseaseReportService
 {
@@ -44,7 +47,7 @@ public sealed class DiseaseReportService(
         var validatedImages = new List<ValidatedImage>(request.Images.Count);
         foreach (var image in request.Images)
         {
-            var detected = DetectImage(image.Content);
+            var detected = ImageFileSignature.Detect(image.Content);
             var originalName = Path.GetFileName(image.FileName);
             if (detected is null ||
                 image.Content.Length == 0 ||
@@ -238,6 +241,9 @@ public sealed class DiseaseReportService(
             .Include(item => item.ExportPlan)
                 .ThenInclude(plan => plan.Destination)
             .Include(item => item.Images)
+            .Include(item => item.Sources)
+            .Include(item => item.ChatSession)!
+                .ThenInclude(session => session!.Messages)
             .OrderBy(item => item.CreatedAt)
             .FirstOrDefaultAsync(
                 item => item.Status == DiseaseAnalysisStatus.Waiting,
@@ -264,17 +270,81 @@ public sealed class DiseaseReportService(
                     buffer.ToArray()));
             }
 
-            var planContext = await BuildPlanContextAsync(
-                report.ExportPlan,
-                cancellationToken);
-            var result = await visionAnalyzer.AnalyzeAsync(
-                new DiseaseVisionRequest(
+            var planContext = !string.IsNullOrWhiteSpace(report.ContextSnapshotJson)
+                ? report.ContextSnapshotJson
+                : await BuildPlanContextAsync(report.ExportPlan, cancellationToken);
+            if (report.ChatSession is not null)
+            {
+                planContext += "\n\nحقائق جلسة التشخيص:\n" + (report.CaseFactsJson ?? "{}") +
+                    "\n\nمحادثة التشخيص:\n" + string.Join("\n", report.ChatSession.Messages
+                        .Where(message => message.Status == ChatMessageStatus.Completed)
+                        .OrderBy(message => message.Id)
+                        .Select(message => $"{message.Role}: {message.Content}"));
+            }
+            var request = new DiseaseVisionRequest(
                     planContext,
                     report.ObservationDate,
                     report.AffectedArea,
                     report.UserNotes,
-                    images),
-                cancellationToken);
+                    images);
+            var result = await visionAnalyzer.AnalyzeAsync(request, cancellationToken);
+
+            if (report.ChatSessionId.HasValue)
+            {
+                var knowledge = await knowledgeProvider.SearchAsync(
+                    report.ExportPlan.Crop.Name,
+                    result.SuspectedDisease,
+                    cancellationToken);
+                report.KnowledgeVerified = knowledge.IsVerified;
+                report.KnowledgeFailureMessage = knowledge.FailureMessage;
+                dbContext.DiseaseReportSources.RemoveRange(report.Sources);
+                report.Sources.Clear();
+                foreach (var source in knowledge.Sources)
+                {
+                    report.Sources.Add(new DiseaseReportSource
+                    {
+                        SourceName = source.SourceName,
+                        SourceUrl = source.SourceUrl,
+                        Publisher = source.Publisher,
+                        SectionReference = source.SectionReference,
+                        Excerpt = source.Excerpt,
+                        ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.Excerpt))),
+                        RetrievedAtUtc = source.RetrievedAtUtc,
+                        IsOfficialOrAcademic = source.IsOfficialOrAcademic
+                    });
+
+                    var cached = await dbContext.ComplianceDocuments.FirstOrDefaultAsync(
+                        item => item.Category == ComplianceCategory.DiseaseTreatment &&
+                                item.Crop == report.ExportPlan.Crop.Name &&
+                                item.SourceUrl == source.SourceUrl,
+                        cancellationToken);
+                    if (cached is null)
+                    {
+                        dbContext.ComplianceDocuments.Add(new ComplianceDocument
+                        {
+                            Category = ComplianceCategory.DiseaseTreatment,
+                            Crop = report.ExportPlan.Crop.Name,
+                            SourceName = source.SourceName,
+                            SourceUrl = source.SourceUrl,
+                            Publisher = source.Publisher,
+                            SectionReference = source.SectionReference,
+                            Content = source.Excerpt,
+                            Embedding = "[]",
+                            RetrievedAtUtc = source.RetrievedAtUtc,
+                            TrustLevel = "Official"
+                        });
+                    }
+                    else
+                    {
+                        cached.Content = source.Excerpt;
+                        cached.RetrievedAtUtc = source.RetrievedAtUtc;
+                        cached.SectionReference = source.SectionReference;
+                    }
+                }
+
+                if (knowledge.IsVerified)
+                    result = await visionAnalyzer.AnalyzeAsync(request with { KnowledgeContext = knowledge.Context }, cancellationToken);
+            }
             ValidateAnalysis(result);
 
             report.SuspectedDisease = result.SuspectedDisease.Trim();
@@ -423,22 +493,6 @@ public sealed class DiseaseReportService(
                 warning += professionalAdvice;
         }
         return warning.Length <= 1000 ? warning : warning[..1000];
-    }
-
-    private static (string ContentType, string Extension)? DetectImage(byte[] content)
-    {
-        if (content.Length >= 8 &&
-            content.AsSpan(0, 8).SequenceEqual(
-                new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }))
-        {
-            return ("image/png", ".png");
-        }
-        if (content.Length >= 3 &&
-            content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF)
-        {
-            return ("image/jpeg", ".jpg");
-        }
-        return null;
     }
 
     private static bool ContentTypeMatches(string claimed, string detected) =>

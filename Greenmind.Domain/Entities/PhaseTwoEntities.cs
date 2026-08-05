@@ -21,6 +21,7 @@ public sealed class ChatSession : BaseEntity
     public ExportPlan? ExportPlan { get; set; }
     public ChatMessage? SummaryThroughMessage { get; set; }
     public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
+    public DiseaseReport? DiagnosisReport { get; set; }
 }
 
 public sealed class ChatMessage : BaseEntity
@@ -100,6 +101,8 @@ public sealed class TaskChangeProposalItem : BaseEntity
     [MaxLength(1000)]
     public required string Reason { get; set; }
 
+    public bool IsIncluded { get; set; } = true;
+
     public TaskChangeProposal TaskChangeProposal { get; set; } = null!;
     public FarmTask? FarmTask { get; set; }
 }
@@ -107,6 +110,7 @@ public sealed class TaskChangeProposalItem : BaseEntity
 public sealed class DiseaseReport : BaseEntity
 {
     public int ExportPlanId { get; set; }
+    public int? ChatSessionId { get; set; }
     public DateOnly ObservationDate { get; set; }
 
     [MaxLength(500)]
@@ -140,14 +144,29 @@ public sealed class DiseaseReport : BaseEntity
 
     public DateTime? CompletedAtUtc { get; set; }
 
+    public string? ReadinessJson { get; set; }
+    public string? CaseFactsJson { get; set; }
+
+    public string? ContextSnapshotJson { get; set; }
+    public bool FinalizedWithOverride { get; set; }
+    public bool KnowledgeVerified { get; set; }
+
+    [MaxLength(500)]
+    public string? KnowledgeFailureMessage { get; set; }
+
+    public DateTime? ClosedAtUtc { get; set; }
+
     public ExportPlan ExportPlan { get; set; } = null!;
+    public ChatSession? ChatSession { get; set; }
     public ICollection<DiseaseImage> Images { get; set; } = new List<DiseaseImage>();
+    public ICollection<DiseaseReportSource> Sources { get; set; } = new List<DiseaseReportSource>();
     public ICollection<TaskChangeProposal> Proposals { get; set; } = new List<TaskChangeProposal>();
 }
 
 public sealed class DiseaseImage : BaseEntity
 {
     public int DiseaseReportId { get; set; }
+    public int? ChatMessageId { get; set; }
 
     [MaxLength(255)]
     public required string OriginalFileName { get; set; }
@@ -162,6 +181,35 @@ public sealed class DiseaseImage : BaseEntity
 
     [MaxLength(128)]
     public required string Checksum { get; set; }
+
+    public DiseaseReport DiseaseReport { get; set; } = null!;
+    public ChatMessage? ChatMessage { get; set; }
+}
+
+public sealed class DiseaseReportSource : BaseEntity
+{
+    public int DiseaseReportId { get; set; }
+
+    [MaxLength(200)]
+    public required string SourceName { get; set; }
+
+    [MaxLength(500)]
+    public required string SourceUrl { get; set; }
+
+    [MaxLength(200)]
+    public string? Publisher { get; set; }
+
+    [MaxLength(200)]
+    public string? SectionReference { get; set; }
+
+    [MaxLength(2000)]
+    public required string Excerpt { get; set; }
+
+    [MaxLength(128)]
+    public required string ContentHash { get; set; }
+
+    public DateTime RetrievedAtUtc { get; set; }
+    public bool IsOfficialOrAcademic { get; set; }
 
     public DiseaseReport DiseaseReport { get; set; } = null!;
 }

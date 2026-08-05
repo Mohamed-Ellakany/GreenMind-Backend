@@ -73,6 +73,27 @@ public sealed class ItiGatewayClientTests
     }
 
     [Fact]
+    public async Task ChatAsync_RetriesTransientGatewayFailures()
+    {
+        var handler = new RecordingHandler(
+            """{"output_text":"recovered reply"}""",
+            HttpStatusCode.ServiceUnavailable,
+            HttpStatusCode.TooManyRequests,
+            HttpStatusCode.OK);
+        var client = CreateClient(handler, new Dictionary<string, string?>
+        {
+            ["iti:ApiKey"] = "sbg_test_key"
+        });
+
+        var result = await client.ChatAsync(
+            "Be concise.",
+            [new ItiChatMessage("user", "Hello")]);
+
+        Assert.Equal("recovered reply", result);
+        Assert.Equal(3, handler.RequestCount);
+    }
+
+    [Fact]
     public async Task MultimodalChatAsync_UsesRequiredImageSchemaAndConfiguredBearerToken()
     {
         var handler = new RecordingHandler("""{"output_text":"image reply"}""");
@@ -95,7 +116,7 @@ public sealed class ItiGatewayClientTests
         Assert.Equal("sbg_test_key", handler.AuthorizationParameter);
 
         using var body = JsonDocument.Parse(handler.RequestBody!);
-        Assert.Equal("anthropic.claude-haiku-4-5-20251001-v1:0", body.RootElement.GetProperty("model_id").GetString());
+        Assert.Equal("anthropic.claude-sonnet-4-6", body.RootElement.GetProperty("model_id").GetString());
         Assert.Equal(300, body.RootElement.GetProperty("max_tokens").GetInt32());
         var message = body.RootElement.GetProperty("messages")[0];
         Assert.Equal("user", message.GetProperty("role").GetString());

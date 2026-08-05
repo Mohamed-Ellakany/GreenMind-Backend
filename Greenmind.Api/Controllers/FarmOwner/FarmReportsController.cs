@@ -186,7 +186,8 @@ public sealed class FarmReportsController(GreenmindDbContext db) : ControllerBas
     private static void ComposeSummary(IContainer container, ReportData report)
     {
         var total = report.Expenses.Sum(item => item.Amount);
-        var average = report.Expenses.Count == 0 ? 0 : total / report.Expenses.Count;
+        var totalArea = report.Plans.Sum(plan => plan.AreaInFeddan);
+        var costPerFeddan = totalArea <= 0 ? 0 : total / totalArea;
         var highestCategory = report.Expenses
             .GroupBy(item => item.ExpenseCategory.Name)
             .Select(group => new { Name = group.Key, Total = group.Sum(item => item.Amount) })
@@ -197,7 +198,7 @@ public sealed class FarmReportsController(GreenmindDbContext db) : ControllerBas
         {
             row.RelativeItem().Element(item => SummaryMetric(item, "عدد المصروفات", FormatNumber(report.Expenses.Count)));
             row.RelativeItem().Element(item => SummaryMetric(item, "إجمالي المصروفات", FormatMoney(total), accent: true, leftToRight: true));
-            row.RelativeItem().Element(item => SummaryMetric(item, "متوسط المصروف", FormatMoney(average), leftToRight: true));
+            row.RelativeItem().Element(item => SummaryMetric(item, "تكلفة الفدان", FormatMoney(costPerFeddan), leftToRight: true));
             row.RelativeItem().Element(item => SummaryMetric(item, "أعلى فئة", highestCategory?.Name ?? "لا توجد بيانات"));
         });
     }

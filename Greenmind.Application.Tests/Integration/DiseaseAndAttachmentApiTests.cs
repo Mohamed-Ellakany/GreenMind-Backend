@@ -255,8 +255,8 @@ public sealed class DiseaseAndAttachmentApiTests(GreenmindApiFactory factory)
         return client;
     }
 
-    private static byte[] ValidPngBytes() =>
-    [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+    private static byte[] ValidPngBytes() => Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
 
     private static JsonSerializerOptions CreateJsonOptions()
     {

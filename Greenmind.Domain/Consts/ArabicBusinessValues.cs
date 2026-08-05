@@ -8,7 +8,8 @@ public static class ArabicBusinessValues
         new Dictionary<ChatScope, string>
         {
             [ChatScope.ExportPlan] = "خطة تصدير",
-            [ChatScope.Farm] = "المزرعة"
+            [ChatScope.Farm] = "المزرعة",
+            [ChatScope.Diagnosis] = "تشخيص المحصول"
         };
 
     private static readonly IReadOnlyDictionary<ChatMessageRole, string> ChatMessageRoles =
@@ -51,7 +52,10 @@ public static class ArabicBusinessValues
             [DiseaseAnalysisStatus.Waiting] = "قيد الانتظار",
             [DiseaseAnalysisStatus.Analyzing] = "جاري التحليل",
             [DiseaseAnalysisStatus.Completed] = "مكتمل",
-            [DiseaseAnalysisStatus.Failed] = "فشل"
+            [DiseaseAnalysisStatus.Failed] = "فشل",
+            [DiseaseAnalysisStatus.Draft] = "مسودة",
+            [DiseaseAnalysisStatus.Ready] = "جاهز للتشخيص",
+            [DiseaseAnalysisStatus.Cancelled] = "ملغي"
         };
 
     private static readonly IReadOnlyDictionary<DiseaseSeverity, string> DiseaseSeverities =

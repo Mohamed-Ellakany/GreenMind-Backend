@@ -23,6 +23,11 @@ namespace Greenmind.Domain.Entities
         [MaxLength(1000)]
         public string? Description { get; set; }
 
+        public decimal Quantity { get; set; } = 1;
+
+        [Required, MaxLength(50)]
+        public string Unit { get; set; } = "وحدة";
+
         public DateOnly PlannedDate { get; set; }
 
         public DateOnly? ActualDate { get; set; }

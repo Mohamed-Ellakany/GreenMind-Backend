@@ -10,6 +10,8 @@ namespace Greenmind.Application.Dtos.AI
         public string TaskTypeName { get; set; }
         public string Title { get; set; }
         public string Description { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
         public DateOnly PlannedDate { get; set; }
         public TaskPriority Priority { get; set; }
     }

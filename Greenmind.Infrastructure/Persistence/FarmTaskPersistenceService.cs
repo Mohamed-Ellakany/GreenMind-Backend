@@ -23,6 +23,7 @@ public class FarmTaskPersistenceService : IFarmTaskPersistenceService
 
         foreach (var dto in agentResponse.Tasks)
         {
+            if (dto.Quantity <= 0 || string.IsNullOrWhiteSpace(dto.Unit)) continue;
             if (!taskTypes.TryGetValue(dto.TaskTypeName, out var taskTypeId))
             {
                 // Skip (or log) unknown task type names instead of crashing the whole batch
@@ -43,6 +44,8 @@ public class FarmTaskPersistenceService : IFarmTaskPersistenceService
                 TaskTypeId = taskTypeId,
                 Title = dto.Title,
                 Description = dto.Description,
+                Quantity = dto.Quantity,
+                Unit = dto.Unit,
                 PlannedDate = dto.PlannedDate,
                 Status = Greenmind.Domain.Consts.Enums.TaskStatus.Pending,
                 Priority = dto.Priority,

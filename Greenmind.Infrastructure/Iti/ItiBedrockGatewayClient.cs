@@ -11,7 +11,7 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
     private const int MaximumTransientAttempts = 3;
     public const string DefaultChatModel = "anthropic.claude-sonnet-4-6";
     public const string DefaultStructuredModel = "openai.gpt-oss-120b-1:0";
-    public const string DefaultVisionModel = "anthropic.claude-haiku-4-5-20251001-v1:0";
+    public const string DefaultVisionModel = "anthropic.claude-sonnet-4-6";
     private static readonly Uri ChatReferer =
         new("http://apiaccess.iti.net.eg/student/playground");
 
@@ -62,13 +62,7 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
             system_prompt = NullIfWhiteSpace(systemPrompt)
         };
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "student/chat")
-        {
-            Content = JsonContent.Create(request, options: SerializerOptions)
-        };
-        httpRequest.Headers.Referrer = ChatReferer;
-
-        using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+        using var response = await SendChatAsync(request, cancellationToken);
         using var document = await ReadSuccessfulJsonAsync(response, cancellationToken);
         return ReadOutputText(document.RootElement);
     }
@@ -132,6 +126,34 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
             {
                 // A connection failure can be temporary. The final exception is
                 // allowed to propagate so the report service can log its details.
+            }
+
+            await Task.Delay(RetryDelay(attempt), cancellationToken);
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendChatAsync(
+        object request,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "student/chat")
+                {
+                    Content = JsonContent.Create(request, options: SerializerOptions)
+                };
+                httpRequest.Headers.Referrer = ChatReferer;
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                if (attempt == MaximumTransientAttempts || !IsTransient(response.StatusCode))
+                    return response;
+
+                response.Dispose();
+            }
+            catch (HttpRequestException) when (attempt < MaximumTransientAttempts)
+            {
+                // Retry temporary connection failures before surfacing an error to the chat.
             }
 
             await Task.Delay(RetryDelay(attempt), cancellationToken);

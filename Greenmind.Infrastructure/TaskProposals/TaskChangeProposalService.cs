@@ -65,6 +65,8 @@ public sealed class TaskChangeProposalService(
                 item.Reason.Length > 1000 ||
                 !taskTypeIds.Contains(item.ProposedValues.TaskTypeId) ||
                 string.IsNullOrWhiteSpace(item.ProposedValues.Title) ||
+                item.ProposedValues.Quantity <= 0 ||
+                string.IsNullOrWhiteSpace(item.ProposedValues.Unit) ||
                 item.ProposedValues.Title.Length > 200 ||
                 item.ProposedValues.Description?.Length > 1000 ||
                 item.ProposedValues.PlannedDate <= today ||
@@ -123,6 +125,8 @@ public sealed class TaskChangeProposalService(
                     generated.Task.TaskTypeId,
                     generated.Task.Title,
                     generated.Task.Description,
+                    generated.Task.Quantity,
+                    generated.Task.Unit,
                     generated.Task.PlannedDate,
                     generated.Task.Status,
                     generated.Task.Priority);
@@ -141,6 +145,48 @@ public sealed class TaskChangeProposalService(
         }
 
         dbContext.TaskChangeProposals.Add(proposal);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TaskProposalResult<TaskChangeProposalDto?>.Success(Map(proposal));
+    }
+
+    public async Task<TaskProposalResult<TaskChangeProposalDto?>> CreateFromDiseaseAsync(
+        int exportPlanId,
+        int sourceDiseaseReportId,
+        IReadOnlyList<GeneratedTaskChangeItem> generatedItems,
+        CancellationToken cancellationToken = default)
+    {
+        var report = await dbContext.DiseaseReports
+            .AsNoTracking()
+            .Where(item =>
+                item.Id == sourceDiseaseReportId &&
+                item.ExportPlanId == exportPlanId &&
+                item.Status == DiseaseAnalysisStatus.Completed &&
+                item.ChatSessionId != null)
+            .Select(item => new
+            {
+                AssistantMessageId = item.ChatSession!.Messages
+                    .Where(message => message.Role == ChatMessageRole.Assistant)
+                    .OrderByDescending(message => message.Id)
+                    .Select(message => (int?)message.Id)
+                    .FirstOrDefault()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (report?.AssistantMessageId is null)
+            return TaskProposalResult<TaskChangeProposalDto?>.NotFound();
+
+        var created = await CreateFromAiAsync(
+            exportPlanId,
+            report.AssistantMessageId.Value,
+            generatedItems,
+            cancellationToken);
+        if (created.Value is null)
+            return created;
+
+        var proposal = await dbContext.TaskChangeProposals
+            .Include(item => item.Items)
+            .SingleAsync(item => item.Id == created.Value.Id, cancellationToken);
+        proposal.SourceChatMessageId = null;
+        proposal.SourceDiseaseReportId = sourceDiseaseReportId;
         await dbContext.SaveChangesAsync(cancellationToken);
         return TaskProposalResult<TaskChangeProposalDto?>.Success(Map(proposal));
     }
@@ -199,7 +245,8 @@ public sealed class TaskChangeProposalService(
 
         var affectedIds = proposal.Items
             .Where(item =>
-                item.Operation == TaskChangeOperation.Modify &&
+                item.IsIncluded &&
+                item.Operation is TaskChangeOperation.Modify or TaskChangeOperation.Cancel &&
                 item.FarmTaskId.HasValue)
             .Select(item => item.FarmTaskId!.Value)
             .ToHashSet();
@@ -209,12 +256,14 @@ public sealed class TaskChangeProposalService(
             .ToHashSet();
 
         var validated = new List<ValidatedOperation>(proposal.Items.Count);
-        foreach (var item in proposal.Items.OrderBy(item => item.Id))
+        foreach (var item in proposal.Items.Where(item => item.IsIncluded).OrderBy(item => item.Id))
         {
             var proposed = DeserializeProposed(item.ProposedValuesJson);
             if (proposed is null ||
                 !taskTypes.Contains(proposed.TaskTypeId) ||
                 string.IsNullOrWhiteSpace(proposed.Title) ||
+                proposed.Quantity <= 0 ||
+                string.IsNullOrWhiteSpace(proposed.Unit) ||
                 proposed.Title.Length > 200 ||
                 proposed.Description?.Length > 1000 ||
                 proposed.PlannedDate <= today ||
@@ -269,6 +318,8 @@ public sealed class TaskChangeProposalService(
                         TaskTypeId = operation.Proposed.TaskTypeId,
                         Title = operation.Proposed.Title.Trim(),
                         Description = Normalize(operation.Proposed.Description),
+                        Quantity = operation.Proposed.Quantity,
+                        Unit = operation.Proposed.Unit.Trim(),
                         PlannedDate = operation.Proposed.PlannedDate,
                         Status = Greenmind.Domain.Consts.Enums.TaskStatus.Pending,
                         Priority = operation.Proposed.Priority
@@ -279,6 +330,8 @@ public sealed class TaskChangeProposalService(
                     operation.Task!.TaskTypeId = operation.Proposed.TaskTypeId;
                     operation.Task.Title = operation.Proposed.Title.Trim();
                     operation.Task.Description = Normalize(operation.Proposed.Description);
+                    operation.Task.Quantity = operation.Proposed.Quantity;
+                    operation.Task.Unit = operation.Proposed.Unit.Trim();
                     operation.Task.PlannedDate = operation.Proposed.PlannedDate;
                     operation.Task.Priority = operation.Proposed.Priority;
                     break;
@@ -292,6 +345,68 @@ public sealed class TaskChangeProposalService(
         proposal.Status = TaskChangeProposalStatus.Applied;
         proposal.ReviewedAtUtc = now;
         proposal.ReviewedByUserId = ownerUserId;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return TaskProposalResult<TaskChangeProposalDto>.Success(Map(proposal));
+    }
+
+    public async Task<TaskProposalResult<TaskChangeProposalDto>> UpdateAsync(
+        int proposalId,
+        string ownerUserId,
+        UpdateTaskProposalRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var proposal = await LoadOwnedProposalAsync(
+            proposalId, ownerUserId, tracking: true, cancellationToken);
+        if (proposal is null)
+            return TaskProposalResult<TaskChangeProposalDto>.NotFound();
+        if (proposal.Status != TaskChangeProposalStatus.PendingReview ||
+            proposal.ExpiresAtUtc <= timeProvider.GetUtcNow().UtcDateTime)
+        {
+            return TaskProposalResult<TaskChangeProposalDto>.Invalid(
+                ApiErrorCodes.Conflict,
+                "لا يمكن تعديل اقتراح غير نشط.");
+        }
+
+        var byId = request.Items.ToDictionary(item => item.Id);
+        if (byId.Count != proposal.Items.Count ||
+            proposal.Items.Any(item => !byId.ContainsKey(item.Id)) ||
+            !request.Items.Any(item => item.IsIncluded))
+        {
+            return TaskProposalResult<TaskChangeProposalDto>.Invalid(
+                ApiErrorCodes.TaskNotEligible,
+                "يجب إرسال كل بنود الاقتراح والإبقاء على بند واحد على الأقل.");
+        }
+
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        foreach (var item in proposal.Items)
+        {
+            var update = byId[item.Id];
+            var current = DeserializeProposed(item.ProposedValuesJson);
+            if (current is null ||
+                string.IsNullOrWhiteSpace(update.Title) || update.Title.Length > 200 ||
+                update.Description?.Length > 1000 || update.Quantity <= 0 ||
+                string.IsNullOrWhiteSpace(update.Unit) || update.Unit.Length > 50 ||
+                update.PlannedDate <= today || update.PlannedDate > proposal.ExportPlan.ExpectedExportDate)
+            {
+                return TaskProposalResult<TaskChangeProposalDto>.Invalid(
+                    ApiErrorCodes.TaskNotEligible,
+                    "تعديلات المهمة غير صالحة أو خارج مدة الخطة.");
+            }
+
+            item.IsIncluded = update.IsIncluded;
+            item.ProposedValuesJson = JsonSerializer.Serialize(
+                current with
+                {
+                    Title = update.Title.Trim(),
+                    Description = Normalize(update.Description),
+                    Quantity = update.Quantity,
+                    Unit = update.Unit.Trim(),
+                    PlannedDate = update.PlannedDate,
+                    Priority = update.Priority
+                },
+                JsonOptions);
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return TaskProposalResult<TaskChangeProposalDto>.Success(Map(proposal));
@@ -363,7 +478,8 @@ public sealed class TaskChangeProposalService(
                 DeserializeProposed(item.ProposedValuesJson)
                     ?? throw new InvalidOperationException(
                         $"Proposal item {item.Id} contains invalid proposed values."),
-                item.Reason))
+                item.Reason,
+                item.IsIncluded))
             .ToList());
 
     private static ProposedTaskValuesDto? DeserializeProposed(string? json) =>
@@ -381,6 +497,8 @@ public sealed class TaskChangeProposalService(
         task.TaskTypeId == original.TaskTypeId &&
         task.Title == original.Title &&
         task.Description == original.Description &&
+        task.Quantity == original.Quantity &&
+        task.Unit == original.Unit &&
         task.PlannedDate == original.PlannedDate &&
         task.Status == original.Status &&
         task.Priority == original.Priority;

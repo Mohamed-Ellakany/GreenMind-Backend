@@ -20,6 +20,7 @@ using Greenmind.Infrastructure.Storage;
 using Greenmind.Infrastructure.Rag;
 using Greenmind.Application.Contracts.ExportPlans;
 using Greenmind.Application.Dtos.ExportPlans;
+using Greenmind.Application.Dtos.TaskProposals;
 
 namespace Greenmind.Application.Tests.Integration;
 
@@ -60,8 +61,14 @@ public sealed class GreenmindApiFactory : WebApplicationFactory<Greenmind.Api.Pr
             services.AddSingleton<IPlanTaskProposalGenerator, StubPlanTaskProposalGenerator>();
             services.RemoveAll<IDiseaseVisionAnalyzer>();
             services.AddSingleton<IDiseaseVisionAnalyzer, StubDiseaseVisionAnalyzer>();
+            services.RemoveAll<IDiagnosisConversationAiService>();
+            services.AddSingleton<IDiagnosisConversationAiService, StubDiagnosisConversationAiService>();
+            services.RemoveAll<IDiagnosisKnowledgeProvider>();
+            services.AddSingleton<IDiagnosisKnowledgeProvider, StubDiagnosisKnowledgeProvider>();
             services.RemoveAll<IExportScheduleAdvisor>();
             services.AddSingleton<IExportScheduleAdvisor, StubExportScheduleAdvisor>();
+            services.RemoveAll<IClimateDataClient>();
+            services.AddSingleton<IClimateDataClient, StubClimateDataClient>();
 
             services.AddAuthentication(options =>
                 {
@@ -182,13 +189,79 @@ internal sealed class StubDiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
             "test-v1"));
 }
 
+internal sealed class StubDiagnosisConversationAiService : IDiagnosisConversationAiService
+{
+    public Task<DiagnosisConversationTurn> ReplyAsync(
+        DiagnosisConversationRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new DiagnosisConversationTurn(
+            "تم تسجيل المعلومات والصورة، وأصبحت الحالة جاهزة للتشخيص.",
+            new DiagnosisFactsDto(
+                "الأوراق والثمار",
+                "منذ ثلاثة أيام",
+                "بدأت في بقعة ثم انتشرت تدريجياً",
+                "نحو 10% من النباتات",
+                "رطوبة مرتفعة وري بالتنقيط",
+                "لم تُستخدم معاملات سابقة")));
+}
+
+internal sealed class StubDiagnosisKnowledgeProvider : IDiagnosisKnowledgeProvider
+{
+    public Task<DiagnosisKnowledgeResult> SearchAsync(
+        string crop,
+        string diseaseSearchTerm,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new DiagnosisKnowledgeResult(
+            [new DiagnosisKnowledgeSource(
+                "UC IPM Strawberry",
+                "https://ipm.ucanr.edu/agriculture/strawberry/",
+                "University of California Agriculture and Natural Resources",
+                "Diseases",
+                "Academic strawberry disease guidance used for the integration test.",
+                DateTime.UtcNow,
+                true)],
+            null));
+}
+
 internal sealed class StubPlanTaskProposalGenerator : IPlanTaskProposalGenerator
 {
     public Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
         string userRequest,
         string planContextJson,
+        CancellationToken cancellationToken = default)
+    {
+        // Diagnosis plans include this richer context. Deliberately return an
+        // invalid three-item proposal so the integration test covers the
+        // deterministic treatment-plan fallback after validation rejects AI output.
+        if (planContextJson.Contains("\"seasonalClimate\"", StringComparison.Ordinal))
+        {
+            var plannedDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3));
+            IReadOnlyList<GeneratedTaskChangeItem> invalidItems =
+            [
+                new("add", null, new ProposedTaskValuesDto(0, "invalid", null, plannedDate, TaskPriority.High), "test"),
+                new("add", null, new ProposedTaskValuesDto(0, "invalid", null, plannedDate, TaskPriority.High), "test"),
+                new("add", null, new ProposedTaskValuesDto(0, "invalid", null, plannedDate, TaskPriority.High), "test")
+            ];
+            return Task.FromResult(invalidItems);
+        }
+
+        return Task.FromResult<IReadOnlyList<GeneratedTaskChangeItem>>([]);
+    }
+}
+
+internal sealed class StubClimateDataClient : IClimateDataClient
+{
+    public Task<ClimateDataSnapshot> GetClimateAsync(
+        double latitude,
+        double longitude,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<GeneratedTaskChangeItem>>([]);
+        Task.FromResult(new ClimateDataSnapshot(
+            latitude,
+            longitude,
+            [new ClimateMonthSummary(DateTime.UtcNow.Month, 24, 15, 31, 2, 62)],
+            DateTime.UtcNow,
+            "Test climate",
+            "https://example.test/climate"));
 }
 
 internal sealed class StubConversationAiService : IConversationAiService

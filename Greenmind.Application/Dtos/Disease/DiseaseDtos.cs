@@ -58,7 +58,8 @@ public sealed record DiseaseVisionRequest(
     DateOnly ObservationDate,
     string? AffectedArea,
     string? Notes,
-    IReadOnlyList<DiseaseVisionImage> Images);
+    IReadOnlyList<DiseaseVisionImage> Images,
+    string? KnowledgeContext = null);
 
 public sealed record DiseaseVisionResult(
     string SuspectedDisease,
