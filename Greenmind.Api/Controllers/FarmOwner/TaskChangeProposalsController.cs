@@ -50,6 +50,20 @@ public sealed class TaskChangeProposalsController(
         return Map(result);
     }
 
+    [HttpPut("{proposalId:int}")]
+    public async Task<ActionResult<TaskChangeProposalDto>> Update(
+        int proposalId,
+        [FromBody] UpdateTaskProposalRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await proposalService.UpdateAsync(
+            proposalId,
+            GetOwnerUserId(),
+            request,
+            cancellationToken);
+        return Map(result);
+    }
+
     private ActionResult<TaskChangeProposalDto> Map(
         TaskProposalResult<TaskChangeProposalDto> result) =>
         result.Status switch

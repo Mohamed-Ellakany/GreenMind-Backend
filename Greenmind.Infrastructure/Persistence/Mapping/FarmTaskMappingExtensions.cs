@@ -12,6 +12,8 @@ namespace Greenmind.Infrastructure.Persistence.Mapping
             TaskTypeName = entity.TaskType?.Name ?? string.Empty, 
             Title = entity.Title,
             Description = entity.Description ?? string.Empty,
+            Quantity = entity.Quantity,
+            Unit = entity.Unit,
             PlannedDate = entity.PlannedDate,
             Priority = entity.Priority   
         };

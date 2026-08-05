@@ -9,6 +9,7 @@ using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Greenmind.Infrastructure.Iti;
 
 namespace Greenmind.Infrastructure.Chat;
 
@@ -262,7 +263,14 @@ public sealed class ChatService(
             userMessage.Content,
             contextJson,
             session.Summary,
-            recentMessages);
+            recentMessages,
+            request.Images
+                .Where(image => image.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                .Take(4)
+                .Select(image => new ConversationImage(
+                    image.ContentType[(image.ContentType.IndexOf('/') + 1)..],
+                    image.DataBase64))
+                .ToList());
 
         return ChatOperationResult<ChatStreamHandle>.Success(
             new ChatStreamHandle(StreamAndPersistAsync(

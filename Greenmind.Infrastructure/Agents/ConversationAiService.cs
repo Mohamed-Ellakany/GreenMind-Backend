@@ -70,10 +70,17 @@ public sealed class ConversationAiService(
                 message.Role == AuthorRole.Assistant ? "assistant" : "user",
                 message.Content ?? string.Empty))
             .ToList();
-        var reply = await gatewayClient.ChatAsync(
-            systemPrompt,
-            messages,
-            cancellationToken: cancellationToken);
+        var reply = request.Images is { Count: > 0 }
+            ? await gatewayClient.MultimodalChatAsync(
+                systemPrompt,
+                request.UserMessage,
+                request.Images!.Select(image => new ItiImageInput(image.Format, image.DataBase64)).ToList(),
+                modelId: ItiBedrockGatewayClient.DefaultVisionModel,
+                cancellationToken: cancellationToken)
+            : await gatewayClient.ChatAsync(
+                systemPrompt,
+                messages,
+                cancellationToken: cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(reply))
             yield return reply;

@@ -27,12 +27,15 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<TaskChangeProposalItem> TaskChangeProposalItems => Set<TaskChangeProposalItem>();
     public DbSet<DiseaseReport> DiseaseReports => Set<DiseaseReport>();
     public DbSet<DiseaseImage> DiseaseImages => Set<DiseaseImage>();
+    public DbSet<DiseaseReportSource> DiseaseReportSources => Set<DiseaseReportSource>();
     public DbSet<ExpenseCategory> ExpenseCategories => Set<ExpenseCategory>();
     public DbSet<ExportPlanBudget> ExportPlanBudgets => Set<ExportPlanBudget>();
     public DbSet<ExportPlanBudgetLine> ExportPlanBudgetLines => Set<ExportPlanBudgetLine>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<ExpenseAttachment> ExpenseAttachments => Set<ExpenseAttachment>();
     public DbSet<AdminInvitation> AdminInvitations => Set<AdminInvitation>();
+    public DbSet<SupportConversation> SupportConversations => Set<SupportConversation>();
+    public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -207,6 +210,10 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
         modelBuilder.Entity<FarmTask>()
             .Property(t => t.Priority)
             .HasConversion<string>();
+
+        modelBuilder.Entity<FarmTask>().Property(t => t.Quantity).HasPrecision(18, 3);
+        modelBuilder.Entity<FarmTask>().Property(t => t.Unit).HasMaxLength(50).IsRequired();
+        modelBuilder.Entity<FarmTask>().ToTable("FarmTasks", table => table.HasCheckConstraint("CK_FarmTasks_Quantity", "[Quantity] > 0"));
 
 
 

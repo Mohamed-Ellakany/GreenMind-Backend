@@ -110,6 +110,7 @@ namespace Greenmind.Infrastructure.Agents.Prompts
 
                 Output: respond with ONLY valid JSON matching:
                 { "tasks": [ { "taskTypeName": "", "title": "", "description": "", "plannedDate": "yyyy-MM-dd", "priority": "Low|Medium|High|Critical" } ] }
+                taskTypeName must stay one of the English task type identifiers above, but title, description, and any unit/user-facing text must be Arabic.
                 No commentary, no markdown, no explanation outside the JSON.
                 """;
         }

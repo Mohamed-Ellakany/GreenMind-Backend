@@ -10,7 +10,7 @@ public sealed class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSess
     {
         builder.ToTable("ChatSessions", table => table.HasCheckConstraint(
             "CK_ChatSessions_Scope",
-            "([Scope] = 1 AND [ExportPlanId] IS NOT NULL) OR ([Scope] = 2 AND [ExportPlanId] IS NULL)"));
+            "([Scope] IN (1, 3) AND [ExportPlanId] IS NOT NULL) OR ([Scope] = 2 AND [ExportPlanId] IS NULL)"));
 
         builder.Property(item => item.Scope).HasConversion<int>();
         builder.Property(item => item.Summary).HasColumnType("nvarchar(max)");
@@ -81,6 +81,9 @@ public sealed class TaskChangeProposalConfiguration : IEntityTypeConfiguration<T
 
         builder.Property(item => item.Status).HasConversion<int>();
         builder.HasIndex(item => new { item.ExportPlanId, item.Status, item.ExpiresAtUtc });
+        builder.HasIndex(item => item.SourceDiseaseReportId)
+            .IsUnique()
+            .HasFilter("[SourceDiseaseReportId] IS NOT NULL AND [Status] = 1");
 
         builder.HasOne(item => item.ExportPlan)
             .WithMany(plan => plan.TaskChangeProposals)
@@ -113,6 +116,7 @@ public sealed class TaskChangeProposalItemConfiguration : IEntityTypeConfigurati
             "([Operation] = 1 AND [FarmTaskId] IS NULL) OR ([Operation] IN (2, 3) AND [FarmTaskId] IS NOT NULL)"));
 
         builder.Property(item => item.Operation).HasConversion<int>();
+        builder.Property(item => item.IsIncluded).HasDefaultValue(true);
         builder.Property(item => item.OriginalValuesJson).HasColumnType("nvarchar(max)");
         builder.Property(item => item.ProposedValuesJson).HasColumnType("nvarchar(max)");
 
@@ -142,14 +146,23 @@ public sealed class DiseaseReportConfiguration : IEntityTypeConfiguration<Diseas
         builder.Property(item => item.ObservedSymptoms).HasColumnType("nvarchar(max)");
         builder.Property(item => item.RecommendedActions).HasColumnType("nvarchar(max)");
         builder.Property(item => item.ExportImpact).HasColumnType("nvarchar(max)");
+        builder.Property(item => item.ReadinessJson).HasColumnType("nvarchar(max)");
+        builder.Property(item => item.CaseFactsJson).HasColumnType("nvarchar(max)");
+        builder.Property(item => item.ContextSnapshotJson).HasColumnType("nvarchar(max)");
 
         builder.HasIndex(item => new { item.ExportPlanId, item.ObservationDate, item.CreatedAt });
         builder.HasIndex(item => new { item.Status, item.CreatedAt });
+        builder.HasIndex(item => item.ChatSessionId).IsUnique().HasFilter("[ChatSessionId] IS NOT NULL");
 
         builder.HasOne(item => item.ExportPlan)
             .WithMany(plan => plan.DiseaseReports)
             .HasForeignKey(item => item.ExportPlanId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(item => item.ChatSession)
+            .WithOne(session => session.DiagnosisReport)
+            .HasForeignKey<DiseaseReport>(item => item.ChatSessionId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }
 
@@ -161,6 +174,24 @@ public sealed class DiseaseImageConfiguration : IEntityTypeConfiguration<Disease
         builder.HasIndex(item => item.StorageKey).IsUnique();
         builder.HasOne(item => item.DiseaseReport)
             .WithMany(report => report.Images)
+            .HasForeignKey(item => item.DiseaseReportId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(item => item.ChatMessage)
+            .WithMany()
+            .HasForeignKey(item => item.ChatMessageId)
+            .OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+public sealed class DiseaseReportSourceConfiguration : IEntityTypeConfiguration<DiseaseReportSource>
+{
+    public void Configure(EntityTypeBuilder<DiseaseReportSource> builder)
+    {
+        builder.ToTable("DiseaseReportSources");
+        builder.HasIndex(item => new { item.DiseaseReportId, item.SourceUrl });
+        builder.HasOne(item => item.DiseaseReport)
+            .WithMany(report => report.Sources)
             .HasForeignKey(item => item.DiseaseReportId)
             .OnDelete(DeleteBehavior.Cascade);
     }
@@ -289,6 +320,45 @@ public sealed class ExpenseAttachmentConfiguration : IEntityTypeConfiguration<Ex
         builder.HasOne(item => item.UploadedByUser)
             .WithMany()
             .HasForeignKey(item => item.UploadedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class SupportConversationConfiguration : IEntityTypeConfiguration<SupportConversation>
+{
+    public void Configure(EntityTypeBuilder<SupportConversation> builder)
+    {
+        builder.ToTable("SupportConversations");
+        builder.Property(item => item.IsClosed).HasDefaultValue(false);
+        builder.HasIndex(item => new { item.FarmId, item.IsClosed, item.LastMessageAtUtc });
+        builder.HasIndex(item => item.FarmId)
+            .IsUnique()
+            .HasFilter("[IsClosed] = 0");
+
+        builder.HasOne(item => item.Farm)
+            .WithMany(farm => farm.SupportConversations)
+            .HasForeignKey(item => item.FarmId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class SupportMessageConfiguration : IEntityTypeConfiguration<SupportMessage>
+{
+    public void Configure(EntityTypeBuilder<SupportMessage> builder)
+    {
+        builder.ToTable("SupportMessages");
+        builder.Property(item => item.Role).HasConversion<int>();
+        builder.Property(item => item.Content).HasColumnType("nvarchar(max)");
+        builder.HasIndex(item => new { item.SupportConversationId, item.CreatedAt, item.Id });
+
+        builder.HasOne(item => item.Conversation)
+            .WithMany(conversation => conversation.Messages)
+            .HasForeignKey(item => item.SupportConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(item => item.Sender)
+            .WithMany()
+            .HasForeignKey(item => item.SenderUserId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

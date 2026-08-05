@@ -19,6 +19,7 @@ using System.Threading.RateLimiting;
 using Serilog;
 using Serilog.Sinks.MSSqlServer;
 using Greenmind.Api.Services;
+using Greenmind.Api.Hubs;
 // OpenAPI models namespace removed; not used when Swagger security is not configured here
 
 namespace Greenmind.Api
@@ -58,6 +59,7 @@ namespace Greenmind.Api
                 options.Filters.Add<ModelStateValidationFilter>();
                 options.Filters.Add<ApiResponseWrappingFilter>();
             });
+            builder.Services.AddSignalR();
 
             // DateOnly JSON converter
             builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(opts =>
@@ -171,6 +173,21 @@ namespace Greenmind.Api
                     NameClaimType = ClaimTypes.NameIdentifier,
                     RoleClaimType = ClaimTypes.Role
                 };
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrWhiteSpace(accessToken) &&
+                            path.StartsWithSegments("/hubs/support"))
+                        {
+                            context.Token = accessToken;
+                        }
+
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
 
@@ -279,6 +296,7 @@ namespace Greenmind.Api
 
 
             app.MapControllers();
+            app.MapHub<SupportHub>("/hubs/support");
 
             app.Run();
         }

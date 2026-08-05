@@ -62,6 +62,9 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
             سياق خطة التصدير:
             {request.PlanContext}
 
+            المعرفة الموثوقة المسترجعة مباشرة وقت التحليل:
+            {request.KnowledgeContext ?? "لم تتوفر معرفة خارجية موثقة لهذه المحاولة."}
+
             قيم severity المسموحة: low, medium, high, critical.
             confidencePercentage رقم من 0 إلى 100.
             """;
@@ -70,11 +73,8 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
                 ToImageFormat(image.ContentType),
                 Convert.ToBase64String(image.Content)))
             .ToList();
-        var response = await AnalyzeImagesAsync(
-            systemPrompt,
-            $"{userPrompt}\n\n{ResponseSchema}",
-            images,
-            cancellationToken);
+        var response = await AnalyzeAsync(
+            systemPrompt, $"{userPrompt}\n\n{ResponseSchema}", images, cancellationToken);
         DiseaseAnalysisPayload payload;
         try
         {
@@ -88,11 +88,8 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
 
                 {ResponseSchema}
                 """;
-            response = await AnalyzeImagesAsync(
-                systemPrompt,
-                $"{userPrompt}\n\n{correctionPrompt}",
-                images,
-                cancellationToken);
+            response = await AnalyzeAsync(
+                systemPrompt, $"{userPrompt}\n\n{correctionPrompt}", images, cancellationToken);
 
             try
             {
@@ -118,18 +115,19 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
             PromptVersion);
     }
 
-    private Task<string> AnalyzeImagesAsync(
+    private Task<string> AnalyzeAsync(
         string systemPrompt,
         string userPrompt,
         IReadOnlyList<ItiImageInput> images,
-        CancellationToken cancellationToken) =>
-        _gatewayClient.MultimodalChatAsync(
-            systemPrompt,
-            userPrompt,
-            images,
-            maxTokens: MaxTokens,
-            modelId: _modelName,
-            cancellationToken: cancellationToken);
+        CancellationToken cancellationToken) => images.Count > 0
+            ? _gatewayClient.MultimodalChatAsync(
+                systemPrompt, userPrompt, images, maxTokens: MaxTokens,
+                modelId: _modelName, cancellationToken: cancellationToken)
+            : _gatewayClient.ChatAsync(
+                systemPrompt,
+                [new ItiChatMessage("user", userPrompt)],
+                modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
+                cancellationToken: cancellationToken);
 
     private static DiseaseAnalysisPayload DeserializePayload(string response) =>
         JsonSerializer.Deserialize<DiseaseAnalysisPayload>(

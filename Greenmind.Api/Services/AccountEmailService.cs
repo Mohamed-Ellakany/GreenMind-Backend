@@ -121,6 +121,13 @@ public sealed class AccountEmailService(
         return SendAsync(email, "Your GreenMind account is approved", body, cancellationToken);
     }
 
+    public Task SendPasswordResetAsync(string email, string fullName, string token, CancellationToken cancellationToken = default)
+    {
+        var url = FrontendUrl("/auth/reset-password?email=" + Uri.EscapeDataString(email) + "&token=" + Uri.EscapeDataString(token));
+        var body = BuildEmail("Reset your GreenMind password", $"Hello {Encode(fullName)},", "Use the button below to choose a new password. This link expires soon.", "Reset password", url, [("Validity", "1 hour")]);
+        return SendAsync(email, "GreenMind password reset", body, cancellationToken);
+    }
+
     private async Task SendAsync(
         string to,
         string subject,

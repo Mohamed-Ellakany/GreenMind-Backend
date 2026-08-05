@@ -11,6 +11,12 @@ public interface ITaskChangeProposalService
         IReadOnlyList<GeneratedTaskChangeItem> generatedItems,
         CancellationToken cancellationToken = default);
 
+    Task<TaskProposalResult<TaskChangeProposalDto?>> CreateFromDiseaseAsync(
+        int exportPlanId,
+        int sourceDiseaseReportId,
+        IReadOnlyList<GeneratedTaskChangeItem> generatedItems,
+        CancellationToken cancellationToken = default);
+
     Task<TaskProposalResult<TaskChangeProposalDto>> GetAsync(
         int proposalId,
         string ownerUserId,
@@ -24,6 +30,12 @@ public interface ITaskChangeProposalService
     Task<TaskProposalResult<TaskChangeProposalDto>> RejectAsync(
         int proposalId,
         string ownerUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<TaskProposalResult<TaskChangeProposalDto>> UpdateAsync(
+        int proposalId,
+        string ownerUserId,
+        UpdateTaskProposalRequest request,
         CancellationToken cancellationToken = default);
 }
 

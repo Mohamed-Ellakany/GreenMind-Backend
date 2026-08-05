@@ -29,4 +29,6 @@ public interface IAccountEmailService
         string fullName,
         string farmName,
         CancellationToken cancellationToken = default);
+
+    Task SendPasswordResetAsync(string email, string fullName, string token, CancellationToken cancellationToken = default);
 }

@@ -15,7 +15,11 @@ public sealed record ConversationAiRequest(
     string UserMessage,
     string ContextJson,
     string? ConversationSummary,
-    IReadOnlyList<ConversationHistoryItem> RecentMessages);
+    IReadOnlyList<ConversationHistoryItem> RecentMessages,
+    IReadOnlyList<ConversationImage>? Images = null);
+
+public sealed record ConversationImage(string Format, string DataBase64);
+
 
 public sealed record ConversationHistoryItem(
     ChatMessageRole Role,

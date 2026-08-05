@@ -29,6 +29,29 @@ namespace Greenmind.Infrastructure.Agents
             var systemPrompt = _promptBuilder.BuildSystemPrompt(request);   
             var userPrompt = _promptBuilder.BuildUserPrompt(request);
             var complianceContext = await BuildComplianceContextAsync(request);
+            var response = await GenerateAsync(systemPrompt, userPrompt, complianceContext);
+            if (response.Tasks.Any(HasNonArabicUserText))
+            {
+                response = await GenerateAsync(
+                    systemPrompt + "\nكل قيم title وdescription وunit داخل tasks يجب أن تكون عربية بالكامل، مع الإبقاء على taskTypeName كما هو.",
+                    userPrompt,
+                    complianceContext);
+            }
+
+            response.Tasks = response.Tasks
+                .Where(t => t.PlannedDate >= request.PlanningWindow.StartDate
+                         && t.PlannedDate <= request.PlanningWindow.EndDate)
+                .Where(t => !HasNonArabicUserText(t))
+                .ToList();
+
+            return response;
+        }
+
+        private async Task<AgentResponse> GenerateAsync(
+            string systemPrompt,
+            string userPrompt,
+            string complianceContext)
+        {
             var json = await _gatewayClient.ChatAsync(
                 systemPrompt,
                 [new ItiChatMessage(
@@ -36,20 +59,23 @@ namespace Greenmind.Infrastructure.Agents
                     $"{userPrompt}\n\nAuthoritative compliance search results:\n{complianceContext}")],
                 modelId: ItiBedrockGatewayClient.DefaultStructuredModel);
 
-            var response = JsonSerializer.Deserialize<AgentResponse>(ItiJson.ExtractObject(json), new JsonSerializerOptions
+            return JsonSerializer.Deserialize<AgentResponse>(ItiJson.ExtractObject(json), new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
                 NumberHandling = JsonNumberHandling.AllowReadingFromString,
                 Converters = { new JsonStringEnumConverter() }
             }) ?? new AgentResponse();
-
-            response.Tasks = response.Tasks
-                .Where(t => t.PlannedDate >= request.PlanningWindow.StartDate
-                         && t.PlannedDate <= request.PlanningWindow.EndDate)
-                .ToList();
-
-            return response;
         }
+
+        private static bool HasNonArabicUserText(TaskItemDto task) =>
+            !ContainsArabicLetter(task.Title) ||
+            !ContainsArabicLetter(task.Unit) ||
+            (!string.IsNullOrWhiteSpace(task.Description) &&
+                !ContainsArabicLetter(task.Description));
+
+        private static bool ContainsArabicLetter(string? value) =>
+            !string.IsNullOrWhiteSpace(value) &&
+            value.Any(character => character is >= '\u0600' and <= '\u06ff');
 
         private async Task<string> BuildComplianceContextAsync(AgentRequest request)
         {

@@ -11,12 +11,16 @@ public sealed class CreateChatSessionRequest
 
 public sealed class SendChatMessageRequest
 {
-    [Required, StringLength(4000, MinimumLength = 1)]
+    [StringLength(4000)]
     public string Content { get; init; } = string.Empty;
 
     [Required, StringLength(100, MinimumLength = 8)]
     public string IdempotencyKey { get; init; } = string.Empty;
+
+    public IReadOnlyList<ChatImageInputDto> Images { get; init; } = [];
 }
+
+public sealed record ChatImageInputDto(string FileName, string ContentType, string DataBase64);
 
 public sealed record ChatSessionDto(
     int Id,

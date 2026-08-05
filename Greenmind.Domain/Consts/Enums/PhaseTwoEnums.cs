@@ -3,7 +3,8 @@ namespace Greenmind.Domain.Consts.Enums;
 public enum ChatScope
 {
     ExportPlan = 1,
-    Farm = 2
+    Farm = 2,
+    Diagnosis = 3
 }
 
 public enum ChatMessageRole
@@ -18,6 +19,12 @@ public enum ChatMessageStatus
     Sending = 1,
     Completed = 2,
     Failed = 3
+}
+
+public enum SupportMessageRole
+{
+    Customer = 1,
+    Admin = 2
 }
 
 public enum TaskChangeProposalStatus
@@ -41,7 +48,10 @@ public enum DiseaseAnalysisStatus
     Waiting = 1,
     Analyzing = 2,
     Completed = 3,
-    Failed = 4
+    Failed = 4,
+    Draft = 5,
+    Ready = 6,
+    Cancelled = 7
 }
 
 public enum DiseaseSeverity

@@ -192,6 +192,29 @@ public class AuthController : ControllerBase
         return Ok(new LoginResponse { Token = token, ExpiresAtUtc = DateTime.UtcNow.AddHours(1) });
     }
 
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is not null && !string.IsNullOrWhiteSpace(user.Email) && _emailService.IsConfigured)
+        {
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            await _emailService.SendPasswordResetAsync(user.Email, user.FullName, token, cancellationToken);
+        }
+        return Accepted(new { Message = "If the email exists, a reset link has been sent." });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is null) return BadRequest(new { Message = "Invalid reset request." });
+        var result = await _userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+        return result.Succeeded ? NoContent() : BadRequest(new { Errors = result.Errors.Select(error => error.Description) });
+    }
+
     [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> Me(CancellationToken cancellationToken)
@@ -239,6 +262,28 @@ public class AuthController : ControllerBase
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)
             return BadRequest(new { Errors = result.Errors.Select(error => error.Description) });
+
+        return await Me(cancellationToken);
+    }
+
+    [Authorize(Roles = RoleNames.FarmOwner)]
+    [HttpPut("me/farm")]
+    public async Task<IActionResult> UpdateMyFarm([FromBody] UpdateMyFarmRequest request, CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized();
+
+        var farm = await _db.Farms.SingleOrDefaultAsync(item => item.OwnerUserId == userId, cancellationToken);
+        if (farm is null)
+            return NotFound();
+
+        var farmName = request.FarmName.Trim();
+        if (farmName.Length == 0)
+            return BadRequest(new { Message = "Farm name is required." });
+
+        farm.Name = farmName;
+        await _db.SaveChangesAsync(cancellationToken);
 
         return await Me(cancellationToken);
     }
@@ -327,6 +372,12 @@ public sealed record UpdateAccountProfileRequest(
     [Required, MaxLength(150)] string FullName,
     [Required, EmailAddress, MaxLength(256)] string Email);
 
+public sealed record UpdateMyFarmRequest(
+    [Required, MaxLength(200)] string FarmName);
+
 public sealed record ChangeAccountPasswordRequest(
     [Required] string CurrentPassword,
     [Required, MinLength(8)] string NewPassword);
+
+public sealed record ForgotPasswordRequest([Required, EmailAddress] string Email);
+public sealed record ResetPasswordRequest([Required, EmailAddress] string Email, [Required] string Token, [Required, MinLength(8)] string NewPassword);

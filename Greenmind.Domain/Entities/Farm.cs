@@ -25,6 +25,7 @@ namespace Greenmind.Domain.Entities
 
         public ICollection<ExportPlan> ExportPlans { get; set; } = new List<ExportPlan>();
         public ICollection<ChatSession> ChatSessions { get; set; } = new List<ChatSession>();
+        public ICollection<SupportConversation> SupportConversations { get; set; } = new List<SupportConversation>();
         public ICollection<ExpenseCategory> ExpenseCategories { get; set; } = new List<ExpenseCategory>();
 
     }
