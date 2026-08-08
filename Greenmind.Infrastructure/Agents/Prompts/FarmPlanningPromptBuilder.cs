@@ -106,11 +106,16 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                 - Any PestControl task's plannedDate must respect the PHI you retrieved (or the fallback) before
                   expectedHarvestDate.
                 - Do not duplicate a task type on a date if taskContext.existingTasks already has an equivalent for that date.
-                - Task types: Irrigation, Fertilization, PestControl, Pruning, SoilTest, Harvest, ExportPrep, QualityCheck.
+                - TaskTypeName is a backend identifier, not user-facing text. Use exactly one of:
+                  Irrigation (الري)، Fertilization (التسميد)، PestControl (مكافحة الآفات)،
+                  Pruning (التقليم)، SoilTest (تحليل التربة)، Harvest (الحصاد)،
+                  ExportPrep (تجهيز التصدير)، QualityCheck (فحص الجودة).
 
                 Output: respond with ONLY valid JSON matching:
-                { "tasks": [ { "taskTypeName": "", "title": "", "description": "", "plannedDate": "yyyy-MM-dd", "priority": "Low|Medium|High|Critical" } ] }
-                taskTypeName must stay one of the English task type identifiers above, but title, description, and any unit/user-facing text must be Arabic.
+                { "tasks": [ { "taskTypeName": "Irrigation", "title": "", "description": "", "quantity": 1, "unit": "", "plannedDate": "yyyy-MM-dd", "priority": "منخفضة|متوسطة|عالية|حرجة" } ] }
+                Every task must include a positive numeric quantity. taskTypeName must stay one of the English backend
+                identifiers above. All user-facing values (title, description, and unit) must be Arabic. priority must
+                be Arabic: منخفضة، متوسطة، عالية، or حرجة.
                 No commentary, no markdown, no explanation outside the JSON.
                 """;
         }

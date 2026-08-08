@@ -14,6 +14,7 @@ public sealed class HistoricalTaskDto
     public string Status { get; set; } = string.Empty;
     public TaskPriority Priority { get; set; }
     public string? Notes { get; set; }
+    public string Origin { get; set; } = string.Empty;
 }
 
 public sealed record AvailableTaskTypeDto(string Name, string? Description);

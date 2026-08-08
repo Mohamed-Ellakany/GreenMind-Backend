@@ -15,7 +15,22 @@ namespace Greenmind.Infrastructure.Persistence.Mapping
             Quantity = entity.Quantity,
             Unit = entity.Unit,
             PlannedDate = entity.PlannedDate,
-            Priority = entity.Priority   
+            ActualDate = entity.ActualDate,
+            Status = entity.Status.ToString(),
+            Priority = entity.Priority,
+            Notes = entity.Notes,
+            Origin = entity.Origin.ToString(),
+            Activities = entity.Activities.OrderByDescending(activity => activity.CreatedAt).Select(activity => new TaskActivityItemDto
+            {
+                EventType = activity.EventType,
+                Source = activity.Source,
+                Note = activity.Note,
+                PreviousStatus = activity.PreviousStatus?.ToString(),
+                NewStatus = activity.NewStatus?.ToString(),
+                PreviousPlannedDate = activity.PreviousPlannedDate,
+                NewPlannedDate = activity.NewPlannedDate,
+                CreatedAt = activity.CreatedAt
+            }).ToList()
         };
 
         public static TaskPriority ToPriorityEnum(this string priority) =>

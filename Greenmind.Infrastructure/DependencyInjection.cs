@@ -63,6 +63,7 @@ public static class DependencyInjection
         });
         services.AddScoped<ISoilMeasurementService, SoilMeasurementService>();
         services.AddScoped<IExportPlanPlanningService, ExportPlanPlanningService>();
+        services.AddScoped<IScheduleRevisionService, ScheduleRevisionService>();
         services.AddScoped<Greenmind.Application.Services.IPasswordHashingService, PasswordHashingService>();
         services.AddScoped<Greenmind.Application.Services.IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRegulatoryDataImportService, RegulatoryDataImportService>();

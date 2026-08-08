@@ -127,6 +127,27 @@ public sealed class ItiGatewayClientTests
     }
 
     [Fact]
+    public async Task MultimodalChatAsync_UsesConfiguredVisionModel()
+    {
+        var handler = new RecordingHandler("""{"output_text":"image reply"}""");
+        var client = CreateClient(handler, new Dictionary<string, string?>
+        {
+            ["iti:ApiKey"] = "sbg_test_key",
+            ["iti:VisionModel"] = "qwen.qwen3-vl-235b-a22b"
+        });
+
+        await client.MultimodalChatAsync(
+            null,
+            "Describe the image.",
+            [new ItiImageInput("png", "BASE64_IMAGE")]);
+
+        using var body = JsonDocument.Parse(handler.RequestBody!);
+        Assert.Equal(
+            "qwen.qwen3-vl-235b-a22b",
+            body.RootElement.GetProperty("model_id").GetString());
+    }
+
+    [Fact]
     public async Task MultimodalChatAsync_RetriesTransientGatewayFailures()
     {
         var handler = new RecordingHandler(

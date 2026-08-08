@@ -38,6 +38,9 @@ namespace Greenmind.Domain.Entities
         [Required]
         public TaskPriority Priority { get; set; }
 
+        [Required]
+        public TaskOrigin Origin { get; set; } = TaskOrigin.AIPlanned;
+
         [MaxLength(1000)]
         public string? Notes { get; set; }
 
@@ -46,5 +49,6 @@ namespace Greenmind.Domain.Entities
         public TaskType TaskType { get; set; } = null!;
         public ICollection<TaskChangeProposalItem> ProposalItems { get; set; } = new List<TaskChangeProposalItem>();
         public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
+        public ICollection<FarmTaskActivity> Activities { get; set; } = new List<FarmTaskActivity>();
     }
 }

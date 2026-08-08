@@ -15,6 +15,7 @@ namespace Greenmind.Infrastructure.Persistence
         {
             var entities = await _db.FarmTasks
                 .Include(t => t.TaskType)
+                .Include(t => t.Activities)
                 .Where(t => t.ExportPlanId == exportPlanId
                          && t.PlannedDate >= start
                          && t.PlannedDate <= end)
@@ -27,6 +28,7 @@ namespace Greenmind.Infrastructure.Persistence
         {
             var entities = await _db.FarmTasks
                 .Include(t => t.TaskType)
+                .Include(t => t.Activities)
                 .Where(t => t.ExportPlanId == exportPlanId
                          && t.Status == DomainTaskStatus.Completed
                          && t.PlannedDate >= start

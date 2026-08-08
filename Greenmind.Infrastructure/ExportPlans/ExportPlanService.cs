@@ -255,11 +255,20 @@ public sealed class ExportPlanService(
         var plan = await dbContext.ExportPlans
             .AsNoTracking()
             .Where(plan => plan.Id == exportPlanId && plan.Farm.OwnerUserId == ownerUserId)
+            .Select(plan => new PlanningStatusDto(
+                plan.Id,
+                plan.PlanningStatus.ToString(),
+                plan.PlanningAttemptCount,
+                plan.GeneratedTaskCount,
+                plan.PlanningRequestedAtUtc,
+                plan.PlanningStartedAtUtc,
+                plan.PlanningCompletedAtUtc,
+                plan.PlanningFailureMessage))
             .SingleOrDefaultAsync(cancellationToken);
 
         return plan is null
             ? ExportPlanResult<PlanningStatusDto>.NotFound()
-            : ExportPlanResult<PlanningStatusDto>.Success(MapPlanningStatus(plan));
+            : ExportPlanResult<PlanningStatusDto>.Success(plan);
     }
 
     public async Task<ExportPlanResult<PlanningStatusDto>> RetryPlanningAsync(

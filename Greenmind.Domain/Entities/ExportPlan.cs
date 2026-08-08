@@ -76,6 +76,7 @@ namespace Greenmind.Domain.Entities
         public ICollection<SoilMeasurement> SoilMeasurements { get; set; } = new List<SoilMeasurement>();
         public ICollection<ChatSession> ChatSessions { get; set; } = new List<ChatSession>();
         public ICollection<TaskChangeProposal> TaskChangeProposals { get; set; } = new List<TaskChangeProposal>();
+        public ICollection<ScheduleRevision> ScheduleRevisions { get; set; } = new List<ScheduleRevision>();
         public ICollection<DiseaseReport> DiseaseReports { get; set; } = new List<DiseaseReport>();
         public ExportPlanBudget? Budget { get; set; }
         public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
