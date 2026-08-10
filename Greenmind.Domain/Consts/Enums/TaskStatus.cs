@@ -9,6 +9,8 @@ namespace Greenmind.Domain.Consts.Enums
         Pending,
         InProgress,
         Completed,
-        Cancelled
+        Cancelled,
+        Postponed,
+        Skipped
     }
 }

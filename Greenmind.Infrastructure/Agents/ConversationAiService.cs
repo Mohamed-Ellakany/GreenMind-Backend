@@ -73,9 +73,10 @@ public sealed class ConversationAiService(
         var reply = request.Images is { Count: > 0 }
             ? await gatewayClient.MultimodalChatAsync(
                 systemPrompt,
-                request.UserMessage,
+                string.IsNullOrWhiteSpace(request.UserMessage)
+                    ? "حلّل الصور المرفقة وقدّم ملاحظاتك المهنية بوضوح."
+                    : request.UserMessage,
                 request.Images!.Select(image => new ItiImageInput(image.Format, image.DataBase64)).ToList(),
-                modelId: ItiBedrockGatewayClient.DefaultVisionModel,
                 cancellationToken: cancellationToken)
             : await gatewayClient.ChatAsync(
                 systemPrompt,
@@ -378,7 +379,8 @@ public sealed class ConversationAiService(
     private static string BuildSystemPrompt(ChatScope scope) =>
         scope == ChatScope.Farm
             ? """
-              أنت «عم خضر»، المساعد الزراعي المصري في منصة GreenMind. أجب بالعربية المصرية المهنية، بوضوح واختصار.
+              أنت «عم خضر»، المساعد الزراعي في منصة GreenMind. أجب بالعربية الفصحى الرسمية، بوضوح واختصار.
+              خاطب المستخدم بصيغة مهنية ومحايدة، ولا تستخدم الألقاب أو العبارات العامية مثل «يا باشا» أو «يا هندسة» أو «يا كبير».
               محادثة المزرعة للقراءة والمقارنة فقط. لا تنشئ أو تعدل أو تلغي أي مهمة،
               ولا تدّع تنفيذ أي إجراء. عند طلب تغيير تشغيلي، حدد خطة التصدير المعنية
               واطلب من المستخدم فتح محادثة تلك الخطة. استخدم فقط سياق الخادم.
@@ -401,7 +403,8 @@ public sealed class ConversationAiService(
               - ميّز بوضوح بين حالة اعتماد المادة الفعالة وبين حد المتبقيات الخاص بالمحصول والوجهة.
               """
             : """
-              أنت «عم خضر»، المساعد الزراعي المصري في منصة GreenMind. أجب بالعربية المصرية المهنية، بوضوح واختصار.
+              أنت «عم خضر»، المساعد الزراعي في منصة GreenMind. أجب بالعربية الفصحى الرسمية، بوضوح واختصار.
+              خاطب المستخدم بصيغة مهنية ومحايدة، ولا تستخدم الألقاب أو العبارات العامية مثل «يا باشا» أو «يا هندسة» أو «يا كبير».
               استخدم فقط سياق خطة التصدير الذي يقدمه الخادم. لا تدّع تنفيذ أي تغيير
               على المهام. أي تغيير محتمل يجب أن يظل اقتراحاً يحتاج إلى معاينة وموافقة
               صريحة من مالك المزرعة. اذكر عدم اليقين ولا تقدّم تشخيصاً مخبرياً مؤكداً.

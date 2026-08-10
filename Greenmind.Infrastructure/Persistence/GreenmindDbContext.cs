@@ -16,6 +16,9 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<Destination> Destinations => Set<Destination>();
     public DbSet<ExportPlan> ExportPlans => Set<ExportPlan>();
     public DbSet<FarmTask> FarmTasks => Set<FarmTask>();
+    public DbSet<FarmTaskActivity> FarmTaskActivities => Set<FarmTaskActivity>();
+    public DbSet<ScheduleRevision> ScheduleRevisions => Set<ScheduleRevision>();
+    public DbSet<ScheduleRevisionItem> ScheduleRevisionItems => Set<ScheduleRevisionItem>();
     public DbSet<TaskType> TaskTypes => Set<TaskType>();
     public DbSet<SoilMeasurement> SoilMeasurements => Set<SoilMeasurement>();
     public DbSet<ActiveSubstance> ActiveSubstances => Set<ActiveSubstance>();
@@ -101,11 +104,12 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
           new TaskType { Id = 5, Name = "SoilTest", Description = "Soil sampling and lab analysis", CreatedAt = new DateTime(2026, 1, 1) },
           new TaskType { Id = 6, Name = "Harvest", Description = "Crop harvesting activities", CreatedAt = new DateTime(2026, 1, 1) },
           new TaskType { Id = 7, Name = "ExportPrep", Description = "Packaging, labeling, export documentation", CreatedAt = new DateTime(2026, 1, 1) },
-          new TaskType { Id = 8, Name = "QualityCheck", Description = "Quality/compliance inspection before export", CreatedAt = new DateTime(2026, 1, 1) }
+          new TaskType { Id = 8, Name = "QualityCheck", Description = "Quality/compliance inspection before export", CreatedAt = new DateTime(2026, 1, 1) },
+          new TaskType { Id = 9, Name = "Other", Description = "Other farm activity recorded by the user", CreatedAt = new DateTime(2026, 1, 1) }
       );
 
         modelBuilder.Entity<Crop>().HasData(
-            new Crop { Id = 1, Name = "Strawberry", Description = "Fresh strawberry crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = CropCatalog.Strawberry.Id, Name = CropCatalog.Strawberry.DefaultDisplayName, Description = "Fresh strawberry crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
             new Crop { Id = 2, Name = "Grapes", Description = "Table grapes crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
             new Crop { Id = 3, Name = "Citrus", Description = "Citrus crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
             new Crop { Id = 4, Name = "Potato", Description = "Potato crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
@@ -182,6 +186,12 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
             .HasForeignKey(t => t.TaskTypeId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<FarmTask>()
+            .HasMany(t => t.Activities)
+            .WithOne(activity => activity.FarmTask)
+            .HasForeignKey(activity => activity.FarmTaskId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<SoilMeasurement>()
             .HasOne(s => s.ExportPlan)
             .WithMany(p => p.SoilMeasurements)
@@ -198,8 +208,7 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
             .HasConversion<string>();
 
         modelBuilder.Entity<FarmTask>()
-            .HasIndex(t => new { t.ExportPlanId, t.TaskTypeId, t.PlannedDate })
-            .IsUnique();
+            .HasIndex(t => new { t.ExportPlanId, t.PlannedDate });
 
 
         modelBuilder.Entity<FarmTask>()
@@ -210,6 +219,51 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
         modelBuilder.Entity<FarmTask>()
             .Property(t => t.Priority)
             .HasConversion<string>();
+
+        modelBuilder.Entity<FarmTask>()
+            .Property(t => t.Origin)
+            .HasConversion<string>()
+            .HasMaxLength(32)
+            .HasDefaultValue(Greenmind.Domain.Consts.Enums.TaskOrigin.AIPlanned);
+
+        modelBuilder.Entity<FarmTaskActivity>()
+            .Property(activity => activity.PreviousStatus)
+            .HasConversion<string>()
+            .HasMaxLength(32);
+
+        modelBuilder.Entity<FarmTaskActivity>()
+            .Property(activity => activity.NewStatus)
+            .HasConversion<string>()
+            .HasMaxLength(32);
+
+        modelBuilder.Entity<FarmTaskActivity>()
+            .HasIndex(activity => new { activity.FarmTaskId, activity.CreatedAt });
+
+        modelBuilder.Entity<ScheduleRevision>()
+            .HasOne(revision => revision.ExportPlan)
+            .WithMany(plan => plan.ScheduleRevisions)
+            .HasForeignKey(revision => revision.ExportPlanId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ScheduleRevision>()
+            .Property(revision => revision.Status)
+            .HasConversion<string>()
+            .HasMaxLength(32);
+        modelBuilder.Entity<ScheduleRevision>()
+            .HasIndex(revision => new { revision.ExportPlanId, revision.Status, revision.CreatedAt });
+        modelBuilder.Entity<ScheduleRevisionItem>()
+            .HasOne(item => item.ScheduleRevision)
+            .WithMany(revision => revision.Items)
+            .HasForeignKey(item => item.ScheduleRevisionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ScheduleRevisionItem>()
+            .HasOne(item => item.FarmTask)
+            .WithMany()
+            .HasForeignKey(item => item.FarmTaskId)
+            .OnDelete(DeleteBehavior.NoAction);
+        modelBuilder.Entity<ScheduleRevisionItem>()
+            .Property(item => item.Operation)
+            .HasConversion<string>()
+            .HasMaxLength(32);
 
         modelBuilder.Entity<FarmTask>().Property(t => t.Quantity).HasPrecision(18, 3);
         modelBuilder.Entity<FarmTask>().Property(t => t.Unit).HasMaxLength(50).IsRequired();

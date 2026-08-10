@@ -18,6 +18,75 @@ public sealed class ExportPlanPlanningService(
     ISeasonCalculationService seasonCalculationService,
     TimeProvider timeProvider) : IExportPlanPlanningService
 {
+    public async Task<IReadOnlyList<TaskItemDto>> GenerateRevisionTasksAsync(
+        int exportPlanId,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await dbContext.ExportPlans
+            .AsNoTracking()
+            .Include(item => item.Farm)
+            .Include(item => item.Crop)
+            .Include(item => item.Destination)
+            .SingleAsync(item => item.Id == exportPlanId, cancellationToken);
+
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var start = today;
+        var end = plan.ExpectedExportDate < today.AddDays(7)
+            ? plan.ExpectedExportDate
+            : today.AddDays(7);
+        if (end < start)
+            return [];
+
+        var season = seasonCalculationService.Calculate(plan.PlantingDate, plan.ExpectedHarvestDate, today);
+        var weatherTask = weatherHttpClient.GetForecastAsync(plan.Latitude, plan.Longitude, start, end);
+        var soilHistory = await soilRepository.GetHistoryAsync(plan.Id, today.AddDays(-90));
+        var latestSoil = await soilRepository.GetLatestAsync(plan.Id);
+        var taskTypes = await dbContext.TaskTypes.AsNoTracking().OrderBy(item => item.Id)
+            .Select(item => new AvailableTaskTypeDto(item.Name, item.Description)).ToListAsync(cancellationToken);
+        var schedule = await dbContext.FarmTasks.AsNoTracking()
+            .Where(task => task.ExportPlan.FarmId == plan.FarmId && task.PlannedDate >= start && task.PlannedDate <= end)
+            .OrderBy(task => task.PlannedDate)
+            .Select(task => new HistoricalTaskDto
+            {
+                ExportPlanId = task.ExportPlanId, PlanName = task.ExportPlan.Name,
+                TaskTypeName = task.TaskType.Name, Title = task.Title, Description = task.Description,
+                PlannedDate = task.PlannedDate, ActualDate = task.ActualDate,
+                Status = task.Status.ToString(), Priority = task.Priority, Notes = task.Notes
+                , Origin = task.Origin.ToString()
+            }).ToListAsync(cancellationToken);
+        var request = new AgentRequest
+        {
+            Mode = "revision",
+            ExportPlan = new ExportPlanDto
+            {
+                ExportPlanId = plan.Id, PlanName = plan.Name, FarmName = plan.Farm.Name,
+                CropId = plan.CropId, Crop = plan.Crop.Name, CropDescription = plan.Crop.Description,
+                Destination = plan.Destination.Name, DestinationDescription = plan.Destination.Description,
+                Governorate = plan.Governorate, City = plan.City, Latitude = plan.Latitude, Longitude = plan.Longitude,
+                AreaInFeddan = plan.AreaInFeddan, PlantingDate = plan.PlantingDate,
+                ExpectedHarvestDate = plan.ExpectedHarvestDate, ExpectedExportDate = plan.ExpectedExportDate,
+                CurrentSeasonDay = season.CurrentSeasonDay, GrowthStage = season.GrowthStage, Notes = plan.Notes
+            },
+            PlanningWindow = new PlanningWindowDto { StartDate = start, EndDate = end, DaysToGenerate = end.DayNumber - start.DayNumber + 1 },
+            LatestSoilMeasurement = latestSoil,
+            SoilHistory = soilHistory,
+            WeatherForecast = await weatherTask,
+            ExistingFarmSchedule = schedule,
+            AvailableTaskTypes = taskTypes
+        };
+        var response = await agentPlanningService.GeneratePlanAsync(request);
+        var knownTaskTypes = taskTypes.Select(item => item.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var cropPhi = EuComplianceRules.GetPreHarvestIntervalDays(plan.CropId, fallbackDays: 7);
+        return response.Tasks
+            .Where(task => task.PlannedDate >= start && task.PlannedDate <= end && task.Quantity > 0 &&
+                           !string.IsNullOrWhiteSpace(task.Unit) && knownTaskTypes.Contains(task.TaskTypeName) &&
+                           (!task.TaskTypeName.Equals("PestControl", StringComparison.OrdinalIgnoreCase) ||
+                            task.PlannedDate <= plan.ExpectedHarvestDate.AddDays(-cropPhi)))
+            .GroupBy(task => new { Type = task.TaskTypeName.ToUpperInvariant(), task.PlannedDate })
+            .Select(group => group.First())
+            .ToList();
+    }
+
     public async Task<int> GenerateInitialTasksAsync(
         int exportPlanId,
         CancellationToken cancellationToken = default)
@@ -111,6 +180,7 @@ public sealed class ExportPlanPlanningService(
                 ExportPlanId = plan.Id,
                 PlanName = plan.Name,
                 FarmName = plan.Farm.Name,
+                CropId = plan.CropId,
                 Crop = plan.Crop.Name,
                 CropDescription = plan.Crop.Description,
                 Destination = plan.Destination.Name,
@@ -145,14 +215,14 @@ public sealed class ExportPlanPlanningService(
         var knownTaskTypes = request.AvailableTaskTypes
             .Select(item => item.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var cropPhi = EuComplianceRules.PreHarvestIntervalDays.TryGetValue(plan.Crop.Name, out var phi)
-            ? phi
-            : 7;
+        var cropPhi = EuComplianceRules.GetPreHarvestIntervalDays(plan.CropId, fallbackDays: 7);
 
         response.Tasks = response.Tasks
             .Where(task =>
                 task.PlannedDate >= start &&
                 task.PlannedDate <= end &&
+                task.Quantity > 0 &&
+                !string.IsNullOrWhiteSpace(task.Unit) &&
                 knownTaskTypes.Contains(task.TaskTypeName) &&
                 (!task.TaskTypeName.Equals("PestControl", StringComparison.OrdinalIgnoreCase) ||
                  task.PlannedDate <= plan.ExpectedHarvestDate.AddDays(-cropPhi)))

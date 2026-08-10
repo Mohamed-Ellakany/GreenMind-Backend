@@ -7,11 +7,14 @@ namespace Greenmind.Domain.Consts
     public static class EuComplianceRules
     {
         // Pre-harvest interval بالأيام لكل محصول (المدة اللي لازم تعدي بين آخر رش وبين الحصاد)
-        public static readonly Dictionary<string, int> PreHarvestIntervalDays = new(StringComparer.OrdinalIgnoreCase)
+        private static readonly IReadOnlyDictionary<int, int> PreHarvestIntervalDays = new Dictionary<int, int>
         {
-            { "Strawberry", 15 }
+            { CropCatalog.Strawberry.Id, 15 }
            
         };
+
+        public static int GetPreHarvestIntervalDays(int cropId, int fallbackDays) =>
+            PreHarvestIntervalDays.TryGetValue(cropId, out var days) ? days : fallbackDays;
 
         public const string GeneralGuidelines = """
             EU export compliance rules (Regulation EC No 396/2005 and related):

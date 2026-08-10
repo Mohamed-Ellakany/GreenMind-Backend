@@ -43,7 +43,9 @@ public sealed record TaskSummaryDto(
     int Pending,
     int InProgress,
     int Completed,
-    int Cancelled);
+    int Cancelled,
+    int Postponed = 0,
+    int Skipped = 0);
 
 public sealed record DashboardTaskDto(
     int Id,
@@ -52,4 +54,7 @@ public sealed record DashboardTaskDto(
     DateOnly PlannedDate,
     DateOnly? ActualDate,
     string Status,
-    string Priority);
+    string Priority,
+    string? Description = null,
+    string? Notes = null,
+    string Origin = "AIPlanned");

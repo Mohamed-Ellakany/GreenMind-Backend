@@ -250,6 +250,7 @@ namespace Greenmind.Api
             {
                 builder.Services.AddHostedService<Greenmind.Api.HostedServices.InitialExportPlanPlanningService>();
                 builder.Services.AddHostedService<Greenmind.Api.HostedServices.DailyRollingPlanningService>();
+                builder.Services.AddHostedService<Greenmind.Api.HostedServices.ScheduleRevisionWorker>();
             }
 
             if (!builder.Environment.IsEnvironment("Testing"))
@@ -258,6 +259,17 @@ namespace Greenmind.Api
             }
 
             var app = builder.Build();
+
+            // Apply schema changes before seeding or starting hosted services that query
+            // newly introduced tables.
+            using (var migrationScope = app.Services.CreateScope())
+            {
+                var db = migrationScope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+                if (db.Database.IsRelational())
+                {
+                    db.Database.Migrate();
+                }
+            }
 
             app.UseCors("AllowAll");
 
@@ -275,9 +287,11 @@ namespace Greenmind.Api
 
 			// Configure the HTTP request pipeline.
 
-            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
-
             app.UseSerilogRequestLogging();
+
+            // Keep exception handling inside request logging so handled client aborts are
+            // recorded with their final 499 status instead of as unhandled 500 errors.
+            app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
             app.UseSwagger();
             app.UseSwaggerUI();

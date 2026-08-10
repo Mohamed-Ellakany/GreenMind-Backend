@@ -14,6 +14,23 @@ public sealed class GlobalExceptionHandlingMiddleware(RequestDelegate next, ILog
         {
             await next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // A disconnected client cancels RequestAborted. Database and HTTP operations
+            // observe that token and surface OperationCanceledException/TaskCanceledException;
+            // this is not an application failure and must not be reported as HTTP 500.
+            _logger.LogDebug(
+                "Request was canceled by the client while processing {Method} {Path}. TraceId: {TraceId}",
+                context.Request.Method,
+                context.Request.Path.Value,
+                context.TraceIdentifier);
+
+            if (!context.Response.HasStarted)
+            {
+                context.Response.Clear();
+                context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+            }
+        }
         catch (Exception exception)
         {
             var traceId = context.TraceIdentifier;

@@ -9,6 +9,7 @@ namespace Greenmind.Application.Dtos.AI
         public int ExportPlanId { get; set; }  
         public string PlanName { get; set; } = null!;
         public string FarmName { get; set; } = null!;
+        public int CropId { get; set; }
         public string Crop { get; set; } = null!;        
         public string? CropDescription { get; set; }
         public string Destination { get; set; } = null!;

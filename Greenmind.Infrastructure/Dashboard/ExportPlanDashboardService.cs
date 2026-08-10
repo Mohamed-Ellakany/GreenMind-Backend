@@ -67,7 +67,9 @@ public sealed class ExportPlanDashboardService(
                 group.Count(task => task.Status == DomainTaskStatus.Pending),
                 group.Count(task => task.Status == DomainTaskStatus.InProgress),
                 group.Count(task => task.Status == DomainTaskStatus.Completed),
-                group.Count(task => task.Status == DomainTaskStatus.Cancelled)))
+                group.Count(task => task.Status == DomainTaskStatus.Cancelled),
+                group.Count(task => task.Status == DomainTaskStatus.Postponed),
+                group.Count(task => task.Status == DomainTaskStatus.Skipped)))
             .SingleOrDefaultAsync(cancellationToken)
             ?? new TaskSummaryDto(0, 0, 0, 0, 0);
 
@@ -75,7 +77,7 @@ public sealed class ExportPlanDashboardService(
             .AsNoTracking()
             .Where(task =>
                 task.ExportPlanId == exportPlanId &&
-                (task.Status == DomainTaskStatus.Pending || task.Status == DomainTaskStatus.InProgress) &&
+                (task.Status == DomainTaskStatus.Pending || task.Status == DomainTaskStatus.InProgress || task.Status == DomainTaskStatus.Postponed) &&
                 task.PlannedDate >= today)
             .OrderBy(task => task.PlannedDate)
             .ThenByDescending(task => task.Priority)
@@ -87,14 +89,17 @@ public sealed class ExportPlanDashboardService(
                 task.PlannedDate,
                 task.ActualDate,
                 task.Status,
-                task.Priority))
+                task.Priority,
+                task.Description,
+                task.Notes,
+                task.Origin))
             .ToListAsync(cancellationToken);
 
         var overdueTasks = await dbContext.FarmTasks
             .AsNoTracking()
             .Where(task =>
                 task.ExportPlanId == exportPlanId &&
-                (task.Status == DomainTaskStatus.Pending || task.Status == DomainTaskStatus.InProgress) &&
+                (task.Status == DomainTaskStatus.Pending || task.Status == DomainTaskStatus.InProgress || task.Status == DomainTaskStatus.Postponed) &&
                 task.PlannedDate < today)
             .OrderByDescending(task => task.Priority)
             .ThenBy(task => task.PlannedDate)
@@ -106,7 +111,10 @@ public sealed class ExportPlanDashboardService(
                 task.PlannedDate,
                 task.ActualDate,
                 task.Status,
-                task.Priority))
+                task.Priority,
+                task.Description,
+                task.Notes,
+                task.Origin))
             .ToListAsync(cancellationToken);
 
         var completedTasks = await dbContext.FarmTasks
@@ -122,7 +130,10 @@ public sealed class ExportPlanDashboardService(
                 task.PlannedDate,
                 task.ActualDate,
                 task.Status,
-                task.Priority))
+                task.Priority,
+                task.Description,
+                task.Notes,
+                task.Origin))
             .ToListAsync(cancellationToken);
 
         return new ExportPlanDashboardDto(
@@ -154,7 +165,10 @@ public sealed class ExportPlanDashboardService(
             task.PlannedDate,
             task.ActualDate,
             task.Status.ToString(),
-            task.Priority.ToString());
+            task.Priority.ToString(),
+            task.Description,
+            task.Notes,
+            task.Origin.ToString());
 
     private sealed record ExportPlanProjection(
         int Id,
@@ -176,5 +190,8 @@ public sealed class ExportPlanDashboardService(
         DateOnly PlannedDate,
         DateOnly? ActualDate,
         DomainTaskStatus Status,
-        TaskPriority Priority);
+        TaskPriority Priority,
+        string? Description,
+        string? Notes,
+        TaskOrigin Origin);
 }

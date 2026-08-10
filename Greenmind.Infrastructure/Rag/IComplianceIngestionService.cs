@@ -1,5 +1,6 @@
 ﻿using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Application.Dtos.AI;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Rag.Chunkers;
 using Microsoft.Extensions.Logging;
@@ -72,7 +73,7 @@ namespace Greenmind.Infrastructure.Rag
                 entities.Add(new ComplianceDocument
                 {
                     Category = chunk.Category,
-                    Crop = chunk.Crop,
+                    Crop = CropCatalog.NormalizeCanonicalKey(chunk.Crop),
                     Destination = chunk.Destination,
                     SourceName = chunk.SourceName,
                     SectionReference = chunk.SectionReference,

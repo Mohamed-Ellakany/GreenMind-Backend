@@ -21,6 +21,7 @@ using Greenmind.Infrastructure.Rag;
 using Greenmind.Application.Contracts.ExportPlans;
 using Greenmind.Application.Dtos.ExportPlans;
 using Greenmind.Application.Dtos.TaskProposals;
+using Greenmind.Domain.Consts;
 
 namespace Greenmind.Application.Tests.Integration;
 
@@ -208,19 +209,21 @@ internal sealed class StubDiagnosisConversationAiService : IDiagnosisConversatio
 internal sealed class StubDiagnosisKnowledgeProvider : IDiagnosisKnowledgeProvider
 {
     public Task<DiagnosisKnowledgeResult> SearchAsync(
-        string crop,
+        string cropCanonicalKey,
         string diseaseSearchTerm,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult(new DiagnosisKnowledgeResult(
-            [new DiagnosisKnowledgeSource(
-                "UC IPM Strawberry",
-                "https://ipm.ucanr.edu/agriculture/strawberry/",
-                "University of California Agriculture and Natural Resources",
-                "Diseases",
-                "Academic strawberry disease guidance used for the integration test.",
-                DateTime.UtcNow,
-                true)],
-            null));
+        Task.FromResult(cropCanonicalKey == CropCatalog.Strawberry.CanonicalKey
+            ? new DiagnosisKnowledgeResult(
+                [new DiagnosisKnowledgeSource(
+                    "UC IPM Strawberry",
+                    "https://ipm.ucanr.edu/agriculture/strawberry/",
+                    "University of California Agriculture and Natural Resources",
+                    "Diseases",
+                    "Academic strawberry disease guidance used for the integration test.",
+                    DateTime.UtcNow,
+                    true)],
+                null)
+            : new DiagnosisKnowledgeResult([], "Unsupported crop knowledge key."));
 }
 
 internal sealed class StubPlanTaskProposalGenerator : IPlanTaskProposalGenerator

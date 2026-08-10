@@ -1277,6 +1277,13 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasDefaultValue("AIPlanned");
+
                     b.Property<DateOnly>("PlannedDate")
                         .HasColumnType("date");
 
@@ -1309,13 +1316,72 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.HasIndex("TaskTypeId");
 
-                    b.HasIndex("ExportPlanId", "TaskTypeId", "PlannedDate")
-                        .IsUnique();
+                    b.HasIndex("ExportPlanId", "PlannedDate");
 
                     b.ToTable("FarmTasks", null, t =>
                         {
                             t.HasCheckConstraint("CK_FarmTasks_Quantity", "[Quantity] > 0");
                         });
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.FarmTaskActivity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ActorUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateOnly?>("ActualDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int>("FarmTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("NewPlannedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("NewStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateOnly?>("PreviousPlannedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("PreviousStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmTaskId", "CreatedAt");
+
+                    b.ToTable("FarmTaskActivities");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ProductMrl", b =>
@@ -1375,6 +1441,96 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("RegionName", "ProductType", "ExternalPesticideId");
 
                     b.ToTable("ProductMrls", (string)null);
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ScheduleRevision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExportPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportPlanId", "Status", "CreatedAt");
+
+                    b.ToTable("ScheduleRevisions");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ScheduleRevisionItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("FarmTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("NewPlannedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateOnly?>("PreviousPlannedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("ScheduleRevisionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TaskTitle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmTaskId");
+
+                    b.HasIndex("ScheduleRevisionId");
+
+                    b.ToTable("ScheduleRevisionItems");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.SoilMeasurement", b =>
@@ -1682,6 +1838,13 @@ namespace Greenmind.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Quality/compliance inspection before export",
                             Name = "QualityCheck"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Other farm activity recorded by the user",
+                            Name = "Other"
                         });
                 });
 
@@ -2104,6 +2267,46 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("TaskType");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.FarmTaskActivity", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.FarmTask", "FarmTask")
+                        .WithMany("Activities")
+                        .HasForeignKey("FarmTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FarmTask");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ScheduleRevision", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
+                        .WithMany("ScheduleRevisions")
+                        .HasForeignKey("ExportPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExportPlan");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ScheduleRevisionItem", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.FarmTask", "FarmTask")
+                        .WithMany()
+                        .HasForeignKey("FarmTaskId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Greenmind.Domain.Entities.ScheduleRevision", "ScheduleRevision")
+                        .WithMany("Items")
+                        .HasForeignKey("ScheduleRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FarmTask");
+
+                    b.Navigation("ScheduleRevision");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.SoilMeasurement", b =>
                 {
                     b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
@@ -2310,6 +2513,8 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.Navigation("FarmTasks");
 
+                    b.Navigation("ScheduleRevisions");
+
                     b.Navigation("SoilMeasurements");
 
                     b.Navigation("TaskChangeProposals");
@@ -2333,9 +2538,16 @@ namespace Greenmind.Infrastructure.Migrations
 
             modelBuilder.Entity("Greenmind.Domain.Entities.FarmTask", b =>
                 {
+                    b.Navigation("Activities");
+
                     b.Navigation("Expenses");
 
                     b.Navigation("ProposalItems");
+                });
+
+            modelBuilder.Entity("Greenmind.Domain.Entities.ScheduleRevision", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Greenmind.Domain.Entities.SupportConversation", b =>
