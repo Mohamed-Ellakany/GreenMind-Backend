@@ -8,6 +8,7 @@ using Greenmind.Application.Contracts.TaskProposals;
 using Greenmind.Application.Dtos.Disease;
 using Greenmind.Application.Dtos.TaskProposals;
 using Greenmind.Application.Interfaces.AI;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
@@ -40,11 +41,11 @@ public sealed class DiagnosisSessionService(
         var plan = await dbContext.ExportPlans
             .AsNoTracking()
             .Where(item => item.Id == exportPlanId && item.Farm.OwnerUserId == ownerUserId)
-            .Select(item => new { item.Id, item.FarmId, Crop = item.Crop.Name })
+            .Select(item => new { item.Id, item.FarmId, item.CropId })
             .SingleOrDefaultAsync(cancellationToken);
         if (plan is null)
             return DiseaseOperationResult<DiagnosisDetailDto>.NotFound();
-        if (!plan.Crop.Equals("Strawberry", StringComparison.OrdinalIgnoreCase))
+        if (!CropCatalog.SupportsSmartDiagnosis(plan.CropId))
         {
             return DiseaseOperationResult<DiagnosisDetailDto>.Invalid(
                 ApiErrorCodes.Conflict,

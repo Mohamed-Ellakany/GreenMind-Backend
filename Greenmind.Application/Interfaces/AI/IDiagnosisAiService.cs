@@ -25,7 +25,7 @@ public sealed record DiagnosisConversationTurn(
 public interface IDiagnosisKnowledgeProvider
 {
     Task<DiagnosisKnowledgeResult> SearchAsync(
-        string crop,
+        string cropCanonicalKey,
         string diseaseSearchTerm,
         CancellationToken cancellationToken = default);
 }

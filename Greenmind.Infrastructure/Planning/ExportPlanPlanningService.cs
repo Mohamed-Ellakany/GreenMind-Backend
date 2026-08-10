@@ -60,7 +60,7 @@ public sealed class ExportPlanPlanningService(
             ExportPlan = new ExportPlanDto
             {
                 ExportPlanId = plan.Id, PlanName = plan.Name, FarmName = plan.Farm.Name,
-                Crop = plan.Crop.Name, CropDescription = plan.Crop.Description,
+                CropId = plan.CropId, Crop = plan.Crop.Name, CropDescription = plan.Crop.Description,
                 Destination = plan.Destination.Name, DestinationDescription = plan.Destination.Description,
                 Governorate = plan.Governorate, City = plan.City, Latitude = plan.Latitude, Longitude = plan.Longitude,
                 AreaInFeddan = plan.AreaInFeddan, PlantingDate = plan.PlantingDate,
@@ -76,7 +76,7 @@ public sealed class ExportPlanPlanningService(
         };
         var response = await agentPlanningService.GeneratePlanAsync(request);
         var knownTaskTypes = taskTypes.Select(item => item.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var cropPhi = EuComplianceRules.PreHarvestIntervalDays.TryGetValue(plan.Crop.Name, out var phi) ? phi : 7;
+        var cropPhi = EuComplianceRules.GetPreHarvestIntervalDays(plan.CropId, fallbackDays: 7);
         return response.Tasks
             .Where(task => task.PlannedDate >= start && task.PlannedDate <= end && task.Quantity > 0 &&
                            !string.IsNullOrWhiteSpace(task.Unit) && knownTaskTypes.Contains(task.TaskTypeName) &&
@@ -180,6 +180,7 @@ public sealed class ExportPlanPlanningService(
                 ExportPlanId = plan.Id,
                 PlanName = plan.Name,
                 FarmName = plan.Farm.Name,
+                CropId = plan.CropId,
                 Crop = plan.Crop.Name,
                 CropDescription = plan.Crop.Description,
                 Destination = plan.Destination.Name,
@@ -214,9 +215,7 @@ public sealed class ExportPlanPlanningService(
         var knownTaskTypes = request.AvailableTaskTypes
             .Select(item => item.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var cropPhi = EuComplianceRules.PreHarvestIntervalDays.TryGetValue(plan.Crop.Name, out var phi)
-            ? phi
-            : 7;
+        var cropPhi = EuComplianceRules.GetPreHarvestIntervalDays(plan.CropId, fallbackDays: 7);
 
         response.Tasks = response.Tasks
             .Where(task =>

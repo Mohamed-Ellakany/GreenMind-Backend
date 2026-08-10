@@ -23,6 +23,39 @@ public sealed class DiagnosisConversationApiTests(GreenmindApiFactory factory)
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     [Fact]
+    public async Task CreateDiagnosis_UsesSeededCropIdentity_WhenDisplayNameChanges()
+    {
+        const string originalName = "Strawberry";
+        var renamed = $"Renamed strawberry {Guid.NewGuid():N}";
+
+        try
+        {
+            using (var scope = factory.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+                var crop = await dbContext.Crops.SingleAsync(item => item.Id == CropCatalog.Strawberry.Id);
+                crop.Name = renamed;
+                await dbContext.SaveChangesAsync();
+            }
+
+            var planId = await SeedStrawberryPlanAsync();
+            using var owner = CreateOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+
+            var response = await owner.PostAsync($"/api/export-plans/{planId}/diagnoses", null);
+
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        }
+        finally
+        {
+            using var scope = factory.Services.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+            var crop = await dbContext.Crops.SingleAsync(item => item.Id == CropCatalog.Strawberry.Id);
+            crop.Name = originalName;
+            await dbContext.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
     public async Task Conversation_DrivesReadiness_FinalizesAndCreatesSafeTreatmentProposal()
     {
         var planId = await SeedStrawberryPlanAsync();
@@ -91,6 +124,15 @@ public sealed class DiagnosisConversationApiTests(GreenmindApiFactory factory)
         Assert.Equal(DiseaseAnalysisStatus.Completed, result?.Summary.Status);
         Assert.True(result?.Summary.KnowledgeVerified);
         Assert.NotEmpty(result?.Sources ?? []);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
+            var cachedKnowledge = await dbContext.ComplianceDocuments.SingleAsync(item =>
+                item.Category == ComplianceCategory.DiseaseTreatment &&
+                item.SourceUrl == "https://ipm.ucanr.edu/agriculture/strawberry/");
+            Assert.Equal(CropCatalog.Strawberry.CanonicalKey, cachedKnowledge.Crop);
+        }
 
         var treatmentResponse = await owner.PostAsync(
             $"/api/export-plans/{planId}/diagnoses/{diagnosis.Summary.Id}/treatment-proposal",

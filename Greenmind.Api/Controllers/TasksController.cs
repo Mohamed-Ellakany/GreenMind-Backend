@@ -139,8 +139,13 @@ public class TasksController : ControllerBase
     [HttpPatch("{id:int}")]
     public async Task<IActionResult> Patch(int id, [FromBody] UpdateTaskRequest request, CancellationToken cancellationToken)
     {
-        var task = await LoadOwnedTaskAsync(id, cancellationToken);
+        var task = await LoadTaskAsync(id, cancellationToken);
         if (task is null) return NotFound();
+        if (!User.IsInRole(RoleNames.Admin))
+        {
+            var farmId = await GetFarmIdAsync(cancellationToken);
+            if (!farmId.HasValue || farmId.Value != task.ExportPlan.FarmId) return Forbid();
+        }
 
         var previousStatus = task.Status;
         var previousDate = task.PlannedDate;
@@ -184,15 +189,18 @@ public class TasksController : ControllerBase
 
     private async Task<FarmTask?> LoadOwnedTaskAsync(int id, CancellationToken cancellationToken)
     {
-        var task = await _db.FarmTasks
-            .Include(item => item.TaskType)
-            .Include(item => item.ExportPlan)
-            .Include(item => item.Activities)
-            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        var task = await LoadTaskAsync(id, cancellationToken);
         if (task is null) return null;
         var farmId = await GetFarmIdAsync(cancellationToken);
         return User.IsInRole(RoleNames.Admin) || farmId == task.ExportPlan.FarmId ? task : null;
     }
+
+    private Task<FarmTask?> LoadTaskAsync(int id, CancellationToken cancellationToken) =>
+        _db.FarmTasks
+            .Include(item => item.TaskType)
+            .Include(item => item.ExportPlan)
+            .Include(item => item.Activities)
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
 
     private async Task<int?> GetFarmIdAsync(CancellationToken cancellationToken)
     {

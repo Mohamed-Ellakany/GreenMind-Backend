@@ -219,6 +219,7 @@ public sealed record ExportPlanDetailsDto(
     string Name,
     int CropId,
     string Crop,
+    bool SupportsSmartDiagnosis,
     int DestinationId,
     string Destination,
     string Governorate,

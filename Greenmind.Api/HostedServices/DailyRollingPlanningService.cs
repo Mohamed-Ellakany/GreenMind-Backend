@@ -132,6 +132,7 @@ public class DailyRollingPlanningService : BackgroundService
                     ExportPlan = new ExportPlanDto
                     {
                         ExportPlanId = plan.Id,
+                        CropId = plan.CropId,
                         Crop = plan.Crop?.Name ?? string.Empty,
                         Destination = plan.Destination?.Name ?? string.Empty,
                         Governorate = plan.Governorate,

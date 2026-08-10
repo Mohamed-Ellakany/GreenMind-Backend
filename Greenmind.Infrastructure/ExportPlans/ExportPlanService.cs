@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Greenmind.Application.Contracts.ExportPlans;
 using Greenmind.Application.Dtos.ExportPlans;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -225,6 +226,7 @@ public sealed class ExportPlanService(
                 item.Name,
                 item.CropId,
                 item.Crop.Name,
+                item.CropId == CropCatalog.Strawberry.Id,
                 item.DestinationId,
                 item.Destination.Name,
                 item.Governorate,
@@ -314,6 +316,7 @@ public sealed class ExportPlanService(
                 plan.Name,
                 plan.CropId,
                 plan.Crop.Name,
+                plan.CropId == CropCatalog.Strawberry.Id,
                 plan.DestinationId,
                 plan.Destination.Name,
                 plan.Governorate,

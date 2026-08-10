@@ -5,6 +5,7 @@ using Greenmind.Application.Contracts.Disease;
 using Greenmind.Application.Contracts.Storage;
 using Greenmind.Application.Dtos.Disease;
 using Greenmind.Application.Interfaces.AI;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
@@ -291,8 +292,12 @@ public sealed class DiseaseReportService(
 
             if (report.ChatSessionId.HasValue)
             {
+                var cropKnowledgeKey = CropCatalog.GetDiagnosisKnowledgeKey(report.ExportPlan.CropId)
+                    ?? throw new InvalidOperationException(
+                        "The crop does not support trusted smart-diagnosis knowledge.");
+                var cropLookupKeys = CropCatalog.GetLookupKeys(cropKnowledgeKey);
                 var knowledge = await knowledgeProvider.SearchAsync(
-                    report.ExportPlan.Crop.Name,
+                    cropKnowledgeKey,
                     result.SuspectedDisease,
                     cancellationToken);
                 report.KnowledgeVerified = knowledge.IsVerified;
@@ -315,7 +320,7 @@ public sealed class DiseaseReportService(
 
                     var cached = await dbContext.ComplianceDocuments.FirstOrDefaultAsync(
                         item => item.Category == ComplianceCategory.DiseaseTreatment &&
-                                item.Crop == report.ExportPlan.Crop.Name &&
+                                item.Crop != null && cropLookupKeys.Contains(item.Crop) &&
                                 item.SourceUrl == source.SourceUrl,
                         cancellationToken);
                     if (cached is null)
@@ -323,7 +328,7 @@ public sealed class DiseaseReportService(
                         dbContext.ComplianceDocuments.Add(new ComplianceDocument
                         {
                             Category = ComplianceCategory.DiseaseTreatment,
-                            Crop = report.ExportPlan.Crop.Name,
+                            Crop = cropKnowledgeKey,
                             SourceName = source.SourceName,
                             SourceUrl = source.SourceUrl,
                             Publisher = source.Publisher,

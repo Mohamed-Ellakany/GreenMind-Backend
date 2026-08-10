@@ -3,6 +3,7 @@ using Greenmind.Application.Interfaces.AI;
 using Greenmind.Infrastructure.Agents.Plugins;
 using Greenmind.Infrastructure.Agents.Prompts;
 using Greenmind.Infrastructure.Iti;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -129,12 +130,15 @@ namespace Greenmind.Infrastructure.Agents
         private async Task<string> BuildComplianceContextAsync(AgentRequest request)
         {
             var crop = request.ExportPlan.Crop;
+            var cropKnowledgeKey = CropCatalog.GetCanonicalKey(request.ExportPlan.CropId)
+                ?? CropCatalog.NormalizeCanonicalKey(crop)
+                ?? crop;
             var quality = await _complianceRag.SearchQualityGradingAsync(
-                $"quality grading sizing packaging requirements for {crop}", crop);
+                $"quality grading sizing packaging requirements for {crop}", cropKnowledgeKey);
             var phytosanitary = await _complianceRag.SearchPhytosanitaryAsync(
-                $"phytosanitary export requirements for {crop} entering {request.ExportPlan.Destination}", crop);
+                $"phytosanitary export requirements for {crop} entering {request.ExportPlan.Destination}", cropKnowledgeKey);
             var pesticide = await _complianceRag.SearchPesticideResidueAsync(
-                $"pesticide residue limits and pre-harvest intervals for {crop}", crop);
+                $"pesticide residue limits and pre-harvest intervals for {crop}", cropKnowledgeKey);
 
             return $"Quality/grading:\n{quality}\nPhytosanitary:\n{phytosanitary}\nPesticide residue:\n{pesticide}";
         }

@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Text;
 using Greenmind.Application.Contracts.Persistence;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using Microsoft.SemanticKernel;
 
@@ -53,7 +54,7 @@ namespace Greenmind.Infrastructure.Agents.Plugins
             var results = await _repo.SearchTextAsync(
                 query,
                 category: category,
-                crop: crop,
+                crop: CropCatalog.NormalizeCanonicalKey(crop),
                 destination: destination,
                 topK: 5);
 

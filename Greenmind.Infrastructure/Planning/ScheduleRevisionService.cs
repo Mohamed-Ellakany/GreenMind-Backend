@@ -5,13 +5,14 @@ using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using DomainTaskStatus = Greenmind.Domain.Consts.Enums.TaskStatus;
 
 namespace Greenmind.Infrastructure.Planning;
 
 public sealed class ScheduleRevisionService(
     GreenmindDbContext db,
-    IExportPlanPlanningService planner,
+    IServiceProvider services,
     TimeProvider timeProvider) : IScheduleRevisionService
 {
     public async Task<ScheduleRevisionDto?> QueueAsync(int exportPlanId, string source, CancellationToken cancellationToken = default)
@@ -56,6 +57,10 @@ public sealed class ScheduleRevisionService(
         await db.SaveChangesAsync(cancellationToken);
         try
         {
+            // Queueing a revision is a database-only operation. Resolve the AI planner only
+            // when the background processor actually needs it so task updates do not depend
+            // on optional weather/AI HTTP configuration being available.
+            var planner = services.GetRequiredService<IExportPlanPlanningService>();
             var proposed = await planner.GenerateRevisionTasksAsync(revision.ExportPlanId, cancellationToken);
             if (proposed.Count == 0)
                 throw new InvalidOperationException("The AI planner returned no safe schedule changes.");

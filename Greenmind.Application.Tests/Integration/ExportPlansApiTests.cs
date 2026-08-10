@@ -34,6 +34,7 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         var created = await ReadDataAsync<ExportPlanDetailsDto>(createResponse);
         Assert.Equal("Summer Strawberry Plan", created.Name);
         Assert.Equal("Strawberry", created.Crop);
+        Assert.True(created.SupportsSmartDiagnosis);
         Assert.Equal(ExportPlanStatus.Planning.ToString(), created.Status);
         Assert.Equal(PlanningGenerationStatus.Pending.ToString(), created.PlanningStatus);
         Assert.Equal(0, created.GeneratedTaskCount);
@@ -169,6 +170,7 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
 
         Assert.Equal(plan.CropName, details.Crop);
         Assert.Equal(plan.DestinationName, details.Destination);
+        Assert.False(details.SupportsSmartDiagnosis);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using Greenmind.Application.Interfaces.AI;
+using Greenmind.Domain.Consts;
 
 namespace Greenmind.Infrastructure.Disease;
 
@@ -11,11 +12,11 @@ public sealed partial class TrustedDiagnosisKnowledgeProvider(
     private const string StrawberryIndex = "https://ipm.ucanr.edu/agriculture/strawberry/";
 
     public async Task<DiagnosisKnowledgeResult> SearchAsync(
-        string crop,
+        string cropCanonicalKey,
         string diseaseSearchTerm,
         CancellationToken cancellationToken = default)
     {
-        if (!crop.Equals("Strawberry", StringComparison.OrdinalIgnoreCase))
+        if (!cropCanonicalKey.Equals(CropCatalog.Strawberry.CanonicalKey, StringComparison.Ordinal))
             return new DiagnosisKnowledgeResult([], "البحث الموثوق المباشر متاح للفراولة فقط في النسخة الحالية.");
 
         try

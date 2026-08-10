@@ -109,7 +109,7 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
       );
 
         modelBuilder.Entity<Crop>().HasData(
-            new Crop { Id = 1, Name = "Strawberry", Description = "Fresh strawberry crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
+            new Crop { Id = CropCatalog.Strawberry.Id, Name = CropCatalog.Strawberry.DefaultDisplayName, Description = "Fresh strawberry crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
             new Crop { Id = 2, Name = "Grapes", Description = "Table grapes crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
             new Crop { Id = 3, Name = "Citrus", Description = "Citrus crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },
             new Crop { Id = 4, Name = "Potato", Description = "Potato crop for export planning", CreatedAt = new DateTime(2026, 1, 1) },

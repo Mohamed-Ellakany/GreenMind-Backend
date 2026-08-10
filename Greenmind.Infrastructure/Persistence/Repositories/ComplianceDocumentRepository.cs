@@ -1,4 +1,5 @@
 ﻿using Greenmind.Application.Contracts.Persistence;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Rag;
@@ -26,7 +27,24 @@ namespace Greenmind.Infrastructure.Persistence.Repositories
                 query = query.Where(d => d.Category == category);
 
             if (!string.IsNullOrWhiteSpace(crop))
-                query = query.Where(d => d.Crop == null || d.Crop == crop);
+            {
+                var cropDisplayName = crop.Trim();
+                var cropId = await Context.Crops
+                    .AsNoTracking()
+                    .Where(item => item.Name == cropDisplayName)
+                    .Select(item => (int?)item.Id)
+                    .SingleOrDefaultAsync(cancellationToken);
+                var stableKey = cropId.HasValue
+                    ? CropCatalog.GetCanonicalKey(cropId.Value)
+                    : null;
+                var cropLookupKeys = CropCatalog.GetLookupKeys(stableKey ?? cropDisplayName)
+                    .Append(cropDisplayName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                query = query.Where(d =>
+                    d.Crop == null ||
+                    (d.Crop != null && cropLookupKeys.Contains(d.Crop)));
+            }
 
             if (!string.IsNullOrWhiteSpace(destination))
                 query = query.Where(d => d.Destination == null || d.Destination == destination);
