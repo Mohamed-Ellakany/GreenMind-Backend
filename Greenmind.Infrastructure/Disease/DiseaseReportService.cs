@@ -287,7 +287,8 @@ public sealed class DiseaseReportService(
                     report.ObservationDate,
                     report.AffectedArea,
                     report.UserNotes,
-                    images);
+                    images,
+                    ExportPlanId: report.ExportPlanId);
             var result = await visionAnalyzer.AnalyzeAsync(request, cancellationToken);
 
             if (report.ChatSessionId.HasValue)

@@ -16,7 +16,10 @@ public sealed record ConversationAiRequest(
     string ContextJson,
     string? ConversationSummary,
     IReadOnlyList<ConversationHistoryItem> RecentMessages,
-    IReadOnlyList<ConversationImage>? Images = null);
+    IReadOnlyList<ConversationImage>? Images = null,
+    string? OwnerUserId = null,
+    int? FarmId = null,
+    int? ExportPlanId = null);
 
 public sealed record ConversationImage(string Format, string DataBase64);
 

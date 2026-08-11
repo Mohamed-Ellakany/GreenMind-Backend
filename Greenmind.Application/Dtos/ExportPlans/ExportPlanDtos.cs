@@ -179,7 +179,9 @@ public sealed record ExportScheduleAdvisorContext(
     DateOnly? RequestedPlantingDate,
     DateOnly? RequestedHarvestDate,
     DateOnly? RequestedExportDate,
-    IReadOnlyList<HistoricalExportScheduleDto> HistoricalSchedules);
+    IReadOnlyList<HistoricalExportScheduleDto> HistoricalSchedules,
+    string? OwnerUserId = null,
+    int? FarmId = null);
 
 public sealed record HistoricalExportScheduleDto(
     DateOnly PlantingDate,

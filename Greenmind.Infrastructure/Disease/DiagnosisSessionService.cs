@@ -218,7 +218,9 @@ public sealed class DiagnosisSessionService(
                     validated.Images.Select(image => new ConversationImage(
                         image.ContentType == "image/png" ? "png" : "jpeg",
                         Convert.ToBase64String(image.Content))).ToList(),
-                    report.Images.Count), cancellationToken);
+                    report.Images.Count,
+                    ownerUserId,
+                    exportPlanId), cancellationToken);
                 facts = turn.Facts;
                 var readinessAfterTurn = BuildReadiness(facts, report.Images.Count);
                 assistantMessage = new ChatMessage
@@ -427,7 +429,8 @@ public sealed class DiagnosisSessionService(
             الإجراءات: {report.RecommendedActions}
             {(safeOnly ? "مهم: اقترح مهام متابعة وفحص وعزل ونظافة واستشارة فقط. ممنوع أي مبيد أو مادة كيميائية أو جرعة." : "لا تقترح مادة كيميائية إلا إذا كانت موثقة صراحة في السياق.")}
             """;
-        var generated = (await proposalGenerator.TryGenerateAsync(request, context, cancellationToken))
+        var generated = (await proposalGenerator.TryGenerateAsync(
+                request, context, cancellationToken, exportPlanId))
             .Where(item => !safeOnly || item.ProposedValues.TaskTypeId != 3)
             .ToList();
         var usedSafeFallback = generated.Count < MinimumTreatmentPlanItems;

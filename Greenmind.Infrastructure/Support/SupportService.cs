@@ -64,33 +64,27 @@ public sealed class SupportService(
     public async Task<IReadOnlyList<SupportConversationDto>> ListAdminConversationsAsync(
         CancellationToken cancellationToken = default)
     {
-        var conversations = await dbContext.SupportConversations
+        return await dbContext.SupportConversations
             .AsNoTracking()
-            .Include(item => item.Farm).ThenInclude(item => item.Owner)
             .OrderByDescending(item => item.LastMessageAtUtc)
             .ThenByDescending(item => item.Id)
-            .ToListAsync(cancellationToken);
-
-        var conversationIds = conversations.Select(item => item.Id).ToArray();
-        var lastMessages = await dbContext.SupportMessages
-            .AsNoTracking()
-            .Where(message => conversationIds.Contains(message.SupportConversationId))
-            .GroupBy(message => message.SupportConversationId)
-            .Select(group => new
-            {
-                ConversationId = group.Key,
-                Content = group.OrderByDescending(message => message.CreatedAt)
+            .Select(item => new SupportConversationDto(
+                item.Id,
+                item.FarmId,
+                item.Farm.Name,
+                item.Farm.Owner.FullName,
+                item.Farm.Owner.Email,
+                item.IsClosed,
+                item.LastMessageAtUtc,
+                item.LastAdminReplyAtUtc,
+                item.LastCustomerMessageAtUtc,
+                dbContext.SupportMessages
+                    .Where(message => message.SupportConversationId == item.Id)
+                    .OrderByDescending(message => message.CreatedAt)
                     .ThenByDescending(message => message.Id)
                     .Select(message => message.Content)
-                    .FirstOrDefault()
-            })
-            .ToDictionaryAsync(item => item.ConversationId, item => item.Content, cancellationToken);
-
-        return conversations
-            .Select(item => MapConversation(
-                item,
-                lastMessages.TryGetValue(item.Id, out var preview) ? preview : null))
-            .ToList();
+                    .FirstOrDefault()))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<SupportOperationResult<SupportMessagePageDto>> GetCustomerMessagesAsync(

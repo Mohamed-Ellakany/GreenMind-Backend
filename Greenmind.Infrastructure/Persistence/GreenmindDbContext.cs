@@ -39,6 +39,7 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<AdminInvitation> AdminInvitations => Set<AdminInvitation>();
     public DbSet<SupportConversation> SupportConversations => Set<SupportConversation>();
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
+    public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +54,30 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
         });
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GreenmindDbContext).Assembly);
+
+        modelBuilder.Entity<ApplicationUser>()
+            .Property(user => user.IsAiAccessSuspended)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<AiUsageRecord>(entity =>
+        {
+            entity.HasIndex(item => item.ProviderRequestId).IsUnique();
+            entity.HasIndex(item => new { item.UserId, item.CompletedAtUtc });
+            entity.HasIndex(item => new { item.Feature, item.CompletedAtUtc });
+            entity.HasIndex(item => new { item.ModelId, item.CompletedAtUtc });
+            entity.HasOne(item => item.User)
+                .WithMany(user => user.AiUsageRecords)
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(item => item.Farm)
+                .WithMany()
+                .HasForeignKey(item => item.FarmId)
+                .OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(item => item.ExportPlan)
+                .WithMany()
+                .HasForeignKey(item => item.ExportPlanId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
 
         modelBuilder.Entity<IdentityRole>().HasData(
             new IdentityRole

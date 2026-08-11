@@ -9,7 +9,8 @@ public sealed record FarmAccountDto(
     bool IsApproved,
     DateTime? ApprovedAtUtc,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool IsAiAccessSuspended = false);
 
 public enum FarmAccountStatus
 {

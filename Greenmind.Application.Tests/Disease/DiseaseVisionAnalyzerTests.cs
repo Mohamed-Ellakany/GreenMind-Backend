@@ -91,7 +91,8 @@ public sealed class DiseaseVisionAnalyzerTests
             string? systemPrompt,
             IReadOnlyList<ItiChatMessage> messages,
             string? modelId = null,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            ItiAiRequestContext? usageContext = null) =>
             throw new NotSupportedException();
 
         public Task<string> MultimodalChatAsync(
@@ -100,7 +101,8 @@ public sealed class DiseaseVisionAnalyzerTests
             IReadOnlyList<ItiImageInput> images,
             int maxTokens = 1200,
             string? modelId = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            ItiAiRequestContext? usageContext = null)
         {
             Prompts.Add(text);
             return Task.FromResult(_responses.Dequeue());

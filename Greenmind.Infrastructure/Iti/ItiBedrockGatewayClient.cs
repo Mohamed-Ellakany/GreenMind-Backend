@@ -22,12 +22,17 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
 
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly IAiUsageTracker? _usageTracker;
     private readonly bool _hasApiKey;
 
-    public ItiBedrockGatewayClient(HttpClient httpClient, IConfiguration configuration)
+    public ItiBedrockGatewayClient(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        IAiUsageTracker? usageTracker = null)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _usageTracker = usageTracker;
 
         // SBG_API_KEY is the gateway's documented environment variable. Keep
         // iti:ApiKey as a local/user-secrets fallback for existing deployments.
@@ -47,9 +52,12 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
         string? systemPrompt,
         IReadOnlyList<ItiChatMessage> messages,
         string? modelId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ItiAiRequestContext? usageContext = null)
     {
         EnsureConfigured();
+        if (_usageTracker is not null)
+            await _usageTracker.EnsureAccessAllowedAsync(usageContext, cancellationToken);
 
         var request = new
         {
@@ -64,6 +72,8 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
 
         using var response = await SendChatAsync(request, cancellationToken);
         using var document = await ReadSuccessfulJsonAsync(response, cancellationToken);
+        if (_usageTracker is not null)
+            await _usageTracker.RecordCompletedAsync(document.RootElement, usageContext, CancellationToken.None);
         return ReadOutputText(document.RootElement);
     }
 
@@ -73,9 +83,12 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
         IReadOnlyList<ItiImageInput> images,
         int maxTokens = 1200,
         string? modelId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ItiAiRequestContext? usageContext = null)
     {
         EnsureConfigured();
+        if (_usageTracker is not null)
+            await _usageTracker.EnsureAccessAllowedAsync(usageContext, cancellationToken);
 
         var combinedPrompt = string.IsNullOrWhiteSpace(systemPrompt)
             ? text
@@ -101,6 +114,8 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
 
         using var response = await SendMultimodalAsync(request, cancellationToken);
         using var document = await ReadSuccessfulJsonAsync(response, cancellationToken);
+        if (_usageTracker is not null)
+            await _usageTracker.RecordCompletedAsync(document.RootElement, usageContext, CancellationToken.None);
         return ReadOutputText(document.RootElement);
     }
 

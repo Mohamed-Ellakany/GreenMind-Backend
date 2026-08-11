@@ -96,7 +96,11 @@ public sealed class TrustedExportScheduleAdvisor(
             systemPrompt,
             [new ItiChatMessage("user", JsonSerializer.Serialize(promptPayload, JsonOptions))],
             ItiBedrockGatewayClient.DefaultStructuredModel,
-            cancellationToken);
+            cancellationToken,
+            new ItiAiRequestContext(
+                AiFeatureNames.ExportScheduleAnalysis,
+                context.OwnerUserId,
+                context.FarmId));
         var model = JsonSerializer.Deserialize<ModelScheduleResponse>(
             ItiJson.ExtractObject(raw),
             JsonOptions) ?? throw new InvalidDataException("The schedule analyst returned an empty response.");

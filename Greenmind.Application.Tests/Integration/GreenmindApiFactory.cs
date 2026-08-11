@@ -231,7 +231,8 @@ internal sealed class StubPlanTaskProposalGenerator : IPlanTaskProposalGenerator
     public Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
         string userRequest,
         string planContextJson,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? exportPlanId = null)
     {
         // Diagnosis plans include this richer context. Deliberately return an
         // invalid three-item proposal so the integration test covers the

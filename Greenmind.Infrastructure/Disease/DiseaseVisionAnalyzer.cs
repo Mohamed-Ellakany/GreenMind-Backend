@@ -74,7 +74,12 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
                 Convert.ToBase64String(image.Content)))
             .ToList();
         var response = await AnalyzeAsync(
-            systemPrompt, $"{userPrompt}\n\n{ResponseSchema}", images, cancellationToken);
+            systemPrompt,
+            $"{userPrompt}\n\n{ResponseSchema}",
+            images,
+            request.ExportPlanId,
+            AiFeatureNames.DiseaseImageAnalysis,
+            cancellationToken);
         DiseaseAnalysisPayload payload;
         try
         {
@@ -89,7 +94,12 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
                 {ResponseSchema}
                 """;
             response = await AnalyzeAsync(
-                systemPrompt, $"{userPrompt}\n\n{correctionPrompt}", images, cancellationToken);
+                systemPrompt,
+                $"{userPrompt}\n\n{correctionPrompt}",
+                images,
+                request.ExportPlanId,
+                AiFeatureNames.DiseaseImageAnalysisRetry,
+                cancellationToken);
 
             try
             {
@@ -119,15 +129,20 @@ public sealed class DiseaseVisionAnalyzer : IDiseaseVisionAnalyzer
         string systemPrompt,
         string userPrompt,
         IReadOnlyList<ItiImageInput> images,
+        int? exportPlanId,
+        string feature,
         CancellationToken cancellationToken) => images.Count > 0
             ? _gatewayClient.MultimodalChatAsync(
                 systemPrompt, userPrompt, images, maxTokens: MaxTokens,
-                modelId: _modelName, cancellationToken: cancellationToken)
+                modelId: _modelName,
+                cancellationToken: cancellationToken,
+                usageContext: new ItiAiRequestContext(feature, ExportPlanId: exportPlanId))
             : _gatewayClient.ChatAsync(
                 systemPrompt,
                 [new ItiChatMessage("user", userPrompt)],
                 modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                usageContext: new ItiAiRequestContext(feature, ExportPlanId: exportPlanId));
 
     private static DiseaseAnalysisPayload DeserializePayload(string response) =>
         JsonSerializer.Deserialize<DiseaseAnalysisPayload>(

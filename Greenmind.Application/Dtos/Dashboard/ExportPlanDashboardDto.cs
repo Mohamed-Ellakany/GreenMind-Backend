@@ -3,11 +3,20 @@ namespace Greenmind.Application.Dtos.Dashboard;
 public sealed record ExportPlanDashboardDto(
     ExportPlanDashboardOverviewDto ExportPlan,
     SeasonProgressDto Season,
+    DashboardWeatherDto? TodayWeather,
     SoilMeasurementDashboardDto? LatestSoilMeasurement,
     TaskSummaryDto TaskSummary,
     IReadOnlyList<DashboardTaskDto> OverdueTasks,
     IReadOnlyList<DashboardTaskDto> UpcomingTasks,
     IReadOnlyList<DashboardTaskDto> CompletedTasks);
+
+public sealed record DashboardWeatherDto(
+    DateOnly Date,
+    double TempMinC,
+    double TempMaxC,
+    double PrecipitationMm,
+    double HumidityPercent,
+    double WindSpeedKmh);
 
 public sealed record ExportPlanDashboardOverviewDto(
     int Id,
