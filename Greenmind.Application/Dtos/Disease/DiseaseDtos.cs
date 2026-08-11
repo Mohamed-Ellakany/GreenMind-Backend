@@ -59,7 +59,8 @@ public sealed record DiseaseVisionRequest(
     string? AffectedArea,
     string? Notes,
     IReadOnlyList<DiseaseVisionImage> Images,
-    string? KnowledgeContext = null);
+    string? KnowledgeContext = null,
+    int? ExportPlanId = null);
 
 public sealed record DiseaseVisionResult(
     string SuspectedDisease,

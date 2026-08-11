@@ -15,6 +15,7 @@ public static class KernelSetup
 {
     public static void AddFarmPlanningKernel(this IServiceCollection services, IConfiguration config)
     {
+        services.AddSingleton<IAiUsageTracker, AiUsageTracker>();
         services.AddHttpClient<IWeatherHttpClient, WeatherHttpClient>(c =>
         {
             c.BaseAddress = CreateWeatherBaseAddress(config["Weather:BaseUrl"]);

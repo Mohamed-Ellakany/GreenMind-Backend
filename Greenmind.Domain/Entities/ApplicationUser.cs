@@ -13,9 +13,13 @@ namespace Greenmind.Domain.Entities
 
         public bool IsActive { get; set; } = true;
 
+        public bool IsAiAccessSuspended { get; set; }
+
         public Farm? Farm { get; set; }
 
         public ICollection<AdminInvitation> CreatedAdminInvitations { get; set; } = new List<AdminInvitation>();
+
+        public ICollection<AiUsageRecord> AiUsageRecords { get; set; } = new List<AiUsageRecord>();
 
     }
 }

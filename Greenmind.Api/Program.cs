@@ -26,7 +26,7 @@ namespace Greenmind.Api
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
             var builder = WebApplication.CreateBuilder(args);
@@ -59,7 +59,10 @@ namespace Greenmind.Api
                 options.Filters.Add<ModelStateValidationFilter>();
                 options.Filters.Add<ApiResponseWrappingFilter>();
             });
-            builder.Services.AddSignalR();
+            builder.Services
+                .AddSignalR()
+                .AddJsonProtocol(options =>
+                    options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
             // DateOnly JSON converter
             builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(opts =>
@@ -130,7 +133,12 @@ namespace Greenmind.Api
                 }
 
                 builder.Services.AddDbContext<GreenmindDbContext>(options =>
-                    options.UseSqlServer(databaseConnectionString));
+                    options.UseSqlServer(
+                        databaseConnectionString,
+                        sqlServerOptions => sqlServerOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(10),
+                            errorNumbersToAdd: null)));
 
                 builder.Services.AddInfrastructureServices();
             }
@@ -267,7 +275,7 @@ namespace Greenmind.Api
                 var db = migrationScope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
                 if (db.Database.IsRelational())
                 {
-                    db.Database.Migrate();
+                    await db.Database.MigrateAsync();
                 }
             }
 
@@ -282,7 +290,7 @@ namespace Greenmind.Api
 
             if (!skipSeeding)
             {
-                app.EnsureRolesAndAdminAsync().GetAwaiter().GetResult();
+                await app.EnsureRolesAndAdminAsync();
             }
 
 			// Configure the HTTP request pipeline.

@@ -7,7 +7,8 @@ public interface IPlanTaskProposalGenerator
     Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
         string userRequest,
         string planContextJson,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int? exportPlanId = null);
 }
 
 public sealed record GeneratedTaskChangeItem(

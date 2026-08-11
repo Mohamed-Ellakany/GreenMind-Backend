@@ -37,7 +37,8 @@ public sealed class PlanTaskProposalGeneratorTests
             string? systemPrompt,
             IReadOnlyList<ItiChatMessage> messages,
             string? modelId = null,
-            CancellationToken cancellationToken = default) => Task.FromResult(response);
+            CancellationToken cancellationToken = default,
+            ItiAiRequestContext? usageContext = null) => Task.FromResult(response);
 
         public Task<string> MultimodalChatAsync(
             string? systemPrompt,
@@ -45,6 +46,7 @@ public sealed class PlanTaskProposalGeneratorTests
             IReadOnlyList<ItiImageInput> images,
             int maxTokens = 1200,
             string? modelId = null,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default,
+            ItiAiRequestContext? usageContext = null) => throw new NotSupportedException();
     }
 }

@@ -16,7 +16,9 @@ public sealed record DiagnosisConversationRequest(
     DiagnosisFactsDto CurrentFacts,
     IReadOnlyList<ConversationHistoryItem> RecentMessages,
     IReadOnlyList<ConversationImage> CurrentImages,
-    int TotalImageCount);
+    int TotalImageCount,
+    string? OwnerUserId = null,
+    int? ExportPlanId = null);
 
 public sealed record DiagnosisConversationTurn(
     string AssistantText,

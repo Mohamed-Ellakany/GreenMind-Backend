@@ -171,7 +171,9 @@ public sealed class ExportPlanService(
                 request.PlantingDate,
                 request.ExpectedHarvestDate,
                 request.ExpectedExportDate,
-                history),
+                history,
+                ownerUserId,
+                farm.Id),
             cancellationToken);
 
         return ExportPlanResult<ExportPlanScheduleAnalysisDto>.Success(

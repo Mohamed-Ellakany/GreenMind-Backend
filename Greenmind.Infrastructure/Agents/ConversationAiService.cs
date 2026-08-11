@@ -70,6 +70,15 @@ public sealed class ConversationAiService(
                 message.Role == AuthorRole.Assistant ? "assistant" : "user",
                 message.Content ?? string.Empty))
             .ToList();
+        var usageContext = new ItiAiRequestContext(
+            request.Images is { Count: > 0 }
+                ? AiFeatureNames.ChatImageAnalysis
+                : request.Scope == ChatScope.ExportPlan
+                    ? AiFeatureNames.ExportPlanChat
+                    : AiFeatureNames.FarmChat,
+            request.OwnerUserId,
+            request.FarmId,
+            request.ExportPlanId);
         var reply = request.Images is { Count: > 0 }
             ? await gatewayClient.MultimodalChatAsync(
                 systemPrompt,
@@ -77,11 +86,13 @@ public sealed class ConversationAiService(
                     ? "حلّل الصور المرفقة وقدّم ملاحظاتك المهنية بوضوح."
                     : request.UserMessage,
                 request.Images!.Select(image => new ItiImageInput(image.Format, image.DataBase64)).ToList(),
-                cancellationToken: cancellationToken)
+                cancellationToken: cancellationToken,
+                usageContext: usageContext)
             : await gatewayClient.ChatAsync(
                 systemPrompt,
                 messages,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                usageContext: usageContext);
 
         if (!string.IsNullOrWhiteSpace(reply))
             yield return reply;

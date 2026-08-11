@@ -1,8 +1,11 @@
 using Greenmind.Application.Contracts.Dashboard;
 using Greenmind.Application.Dtos.Dashboard;
+using Greenmind.Application.Interfaces.AI;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using DomainTaskStatus = Greenmind.Domain.Consts.Enums.TaskStatus;
 
 namespace Greenmind.Infrastructure.Dashboard;
@@ -10,7 +13,9 @@ namespace Greenmind.Infrastructure.Dashboard;
 public sealed class ExportPlanDashboardService(
     GreenmindDbContext dbContext,
     ISeasonCalculationService seasonCalculationService,
-    TimeProvider timeProvider) : IExportPlanDashboardService
+    IServiceProvider serviceProvider,
+    TimeProvider timeProvider,
+    ILogger<ExportPlanDashboardService> logger) : IExportPlanDashboardService
 {
     private const int DashboardTaskLimit = 5;
 
@@ -30,6 +35,8 @@ public sealed class ExportPlanDashboardService(
                 item.Destination.Name,
                 item.Governorate,
                 item.City,
+                item.Latitude,
+                item.Longitude,
                 item.AreaInFeddan,
                 item.PlantingDate,
                 item.ExpectedHarvestDate,
@@ -42,6 +49,13 @@ public sealed class ExportPlanDashboardService(
         }
 
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var weatherTask = GetTodayWeatherAsync(
+            serviceProvider,
+            plan.Latitude,
+            plan.Longitude,
+            today,
+            logger,
+            cancellationToken);
         var latestSoilMeasurement = await dbContext.SoilMeasurements
             .AsNoTracking()
             .Where(measurement => measurement.ExportPlanId == exportPlanId)
@@ -136,6 +150,8 @@ public sealed class ExportPlanDashboardService(
                 task.Origin))
             .ToListAsync(cancellationToken);
 
+        var todayWeather = await weatherTask;
+
         return new ExportPlanDashboardDto(
             new ExportPlanDashboardOverviewDto(
                 plan.Id,
@@ -150,11 +166,42 @@ public sealed class ExportPlanDashboardService(
                 plan.ExpectedHarvestDate,
                 plan.ExpectedExportDate),
             seasonCalculationService.Calculate(plan.PlantingDate, plan.ExpectedHarvestDate, today),
+            todayWeather,
             latestSoilMeasurement,
             taskSummary,
             overdueTasks.Select(MapTask).ToList(),
             upcomingTasks.Select(MapTask).ToList(),
             completedTasks.Select(MapTask).ToList());
+    }
+
+    private static async Task<DashboardWeatherDto?> GetTodayWeatherAsync(
+        IServiceProvider serviceProvider,
+        double latitude,
+        double longitude,
+        DateOnly today,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var weatherHttpClient = serviceProvider.GetRequiredService<IWeatherHttpClient>();
+            var forecast = await weatherHttpClient.GetForecastAsync(latitude, longitude, today, today);
+            var weather = forecast.Days.FirstOrDefault(day => day.Date == today);
+            return weather is null
+                ? null
+                : new DashboardWeatherDto(
+                    weather.Date,
+                    weather.TempMinC,
+                    weather.TempMaxC,
+                    weather.PrecipitationMm,
+                    weather.HumidityPercent,
+                    weather.WindSpeedKmh);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Could not load today's weather for the export-plan dashboard.");
+            return null;
+        }
     }
 
     private static DashboardTaskDto MapTask(DashboardTaskProjection task) =>
@@ -178,6 +225,8 @@ public sealed class ExportPlanDashboardService(
         string Destination,
         string Governorate,
         string City,
+        double Latitude,
+        double Longitude,
         decimal AreaInFeddan,
         DateOnly PlantingDate,
         DateOnly ExpectedHarvestDate,

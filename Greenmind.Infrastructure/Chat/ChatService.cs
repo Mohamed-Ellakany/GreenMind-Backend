@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Greenmind.Application.Contracts.Chat;
@@ -23,6 +24,8 @@ public sealed class ChatService(
 {
     private static readonly JsonSerializerOptions ContextJsonOptions =
         new(JsonSerializerDefaults.Web);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> MessageStartLocks = new();
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> ReplyLocks = new();
 
     public async Task<ChatOperationResult<ChatSessionDto>> CreatePlanSessionAsync(
         int exportPlanId,
@@ -186,58 +189,90 @@ public sealed class ChatService(
             return ChatOperationResult<ChatStreamHandle>.NotFound();
 
         var normalizedKey = request.IdempotencyKey.Trim();
-        var existingUserMessage = await dbContext.ChatMessages
-            .AsNoTracking()
-            .SingleOrDefaultAsync(message =>
-                message.ChatSessionId == sessionId &&
-                message.IdempotencyKey == normalizedKey,
-                cancellationToken);
-
-        if (existingUserMessage is not null)
-        {
-            var replyReference = BuildReplyReference(existingUserMessage.Id);
-            var existingAssistantMessage = await dbContext.ChatMessages
-                .AsNoTracking()
-                .Where(message =>
-                    message.ChatSessionId == sessionId &&
-                    message.Role == ChatMessageRole.Assistant &&
-                    message.Status == ChatMessageStatus.Completed &&
-                    message.ContextReferencesJson == replyReference)
-                .Select(message => new ChatMessageDto(
-                    message.Id,
-                    message.Role,
-                    message.Content,
-                    message.Status,
-                    message.CreatedAt,
-                    message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault()))
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (existingAssistantMessage is not null)
-            {
-                return ChatOperationResult<ChatStreamHandle>.Success(
-                    new ChatStreamHandle(ReplayAsync(existingAssistantMessage)));
-            }
-        }
+        var messageStartKey = $"{sessionId}:{normalizedKey}";
+        var messageStartLock = MessageStartLocks.GetOrAdd(
+            messageStartKey,
+            static _ => new SemaphoreSlim(1, 1));
+        await messageStartLock.WaitAsync(cancellationToken);
 
         ChatMessage userMessage;
-        if (existingUserMessage is null)
+        try
         {
-            userMessage = new ChatMessage
+            var existingUserMessage = await dbContext.ChatMessages
+                .AsNoTracking()
+                .SingleOrDefaultAsync(message =>
+                    message.ChatSessionId == sessionId &&
+                    message.IdempotencyKey == normalizedKey,
+                    cancellationToken);
+
+            if (existingUserMessage is not null)
             {
-                ChatSessionId = session.Id,
-                Role = ChatMessageRole.User,
-                Content = request.Content.Trim(),
-                Status = ChatMessageStatus.Completed,
-                IdempotencyKey = normalizedKey
-            };
-            dbContext.ChatMessages.Add(userMessage);
-            session.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
-            await dbContext.SaveChangesAsync(cancellationToken);
+                var replyReference = BuildReplyReference(existingUserMessage.Id);
+                var existingAssistantMessage = await dbContext.ChatMessages
+                    .AsNoTracking()
+                    .Where(message =>
+                        message.ChatSessionId == sessionId &&
+                        message.Role == ChatMessageRole.Assistant &&
+                        message.Status == ChatMessageStatus.Completed &&
+                        message.ContextReferencesJson == replyReference)
+                    .Select(message => new ChatMessageDto(
+                        message.Id,
+                        message.Role,
+                        message.Content,
+                        message.Status,
+                        message.CreatedAt,
+                        message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault()))
+                    .SingleOrDefaultAsync(cancellationToken);
+
+                if (existingAssistantMessage is not null)
+                {
+                    return ChatOperationResult<ChatStreamHandle>.Success(
+                        new ChatStreamHandle(ReplayAsync(existingAssistantMessage)));
+                }
+            }
+
+            if (existingUserMessage is null)
+            {
+                userMessage = new ChatMessage
+                {
+                    ChatSessionId = session.Id,
+                    Role = ChatMessageRole.User,
+                    Content = request.Content.Trim(),
+                    Status = ChatMessageStatus.Completed,
+                    IdempotencyKey = normalizedKey
+                };
+                dbContext.ChatMessages.Add(userMessage);
+                session.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+                try
+                {
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException)
+                {
+                    // A retry from another server process can still race this one.
+                    // The unique index decides the winner and this request resumes it.
+                    dbContext.Entry(userMessage).State = EntityState.Detached;
+                    dbContext.Entry(session).State = EntityState.Unchanged;
+                    var persistedMessage = await dbContext.ChatMessages
+                        .SingleOrDefaultAsync(message =>
+                            message.ChatSessionId == sessionId &&
+                            message.IdempotencyKey == normalizedKey,
+                            cancellationToken);
+                    if (persistedMessage is null)
+                        throw;
+
+                    userMessage = persistedMessage;
+                }
+            }
+            else
+            {
+                userMessage = await dbContext.ChatMessages
+                    .SingleAsync(message => message.Id == existingUserMessage.Id, cancellationToken);
+            }
         }
-        else
+        finally
         {
-            userMessage = await dbContext.ChatMessages
-                .SingleAsync(message => message.Id == existingUserMessage.Id, cancellationToken);
+            messageStartLock.Release();
         }
 
         var recentMessages = await dbContext.ChatMessages
@@ -270,7 +305,10 @@ public sealed class ChatService(
                 .Select(image => new ConversationImage(
                     image.ContentType[(image.ContentType.IndexOf('/') + 1)..],
                     image.DataBase64))
-                .ToList());
+                .ToList(),
+            ownerUserId,
+            session.FarmId,
+            session.ExportPlanId);
 
         return ChatOperationResult<ChatStreamHandle>.Success(
             new ChatStreamHandle(StreamAndPersistAsync(
@@ -281,6 +319,57 @@ public sealed class ChatService(
     }
 
     private async IAsyncEnumerable<ChatStreamEventDto> StreamAndPersistAsync(
+        ChatSession session,
+        int userMessageId,
+        ConversationAiRequest aiRequest,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var replyLock = ReplyLocks.GetOrAdd(userMessageId, static _ => new SemaphoreSlim(1, 1));
+        await replyLock.WaitAsync(cancellationToken);
+        try
+        {
+            var replyReference = BuildReplyReference(userMessageId);
+            var completedReply = await dbContext.ChatMessages
+                .AsNoTracking()
+                .Where(message =>
+                    message.ChatSessionId == session.Id &&
+                    message.Role == ChatMessageRole.Assistant &&
+                    message.Status == ChatMessageStatus.Completed &&
+                    message.ContextReferencesJson == replyReference)
+                .OrderByDescending(message => message.Id)
+                .Select(message => new ChatMessageDto(
+                    message.Id,
+                    message.Role,
+                    message.Content,
+                    message.Status,
+                    message.CreatedAt,
+                    message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault()))
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (completedReply is not null)
+            {
+                await foreach (var item in ReplayAsync(completedReply).WithCancellation(cancellationToken))
+                    yield return item;
+                yield break;
+            }
+
+            await foreach (var item in StreamAndPersistCoreAsync(
+                               session,
+                               userMessageId,
+                               aiRequest,
+                               cancellationToken)
+                               .WithCancellation(cancellationToken))
+            {
+                yield return item;
+            }
+        }
+        finally
+        {
+            replyLock.Release();
+        }
+    }
+
+    private async IAsyncEnumerable<ChatStreamEventDto> StreamAndPersistCoreAsync(
         ChatSession session,
         int userMessageId,
         ConversationAiRequest aiRequest,
@@ -355,7 +444,8 @@ public sealed class ChatService(
                 var generatedItems = await proposalGenerator.TryGenerateAsync(
                     aiRequest.UserMessage,
                     aiRequest.ContextJson,
-                    CancellationToken.None);
+                    CancellationToken.None,
+                    session.ExportPlanId);
                 var proposalResult = await proposalService.CreateFromAiAsync(
                     session.ExportPlanId.Value,
                     assistantMessage!.Id,

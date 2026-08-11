@@ -47,7 +47,8 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
                 farm.IsApproved,
                 farm.ApprovedAtUtc,
                 farm.Owner.IsActive,
-                farm.CreatedAt))
+                farm.CreatedAt,
+                farm.Owner.IsAiAccessSuspended))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<FarmAccountDto>(items, pageNumber, pageSize, totalCount);
@@ -432,7 +433,8 @@ public sealed class PlatformAdminService(GreenmindDbContext context)
             farm.IsApproved,
             farm.ApprovedAtUtc,
             farm.Owner.IsActive,
-            farm.CreatedAt);
+            farm.CreatedAt,
+            farm.Owner.IsAiAccessSuspended);
 
     private static MasterDataItemDto MapMasterData(Crop crop) =>
         new(

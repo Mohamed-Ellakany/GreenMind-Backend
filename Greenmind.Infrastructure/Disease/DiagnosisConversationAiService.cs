@@ -52,12 +52,20 @@ public sealed class DiagnosisConversationAiService(
                 request.CurrentImages.Select(image =>
                     new ItiImageInput(image.Format, image.DataBase64)).ToList(),
                 modelId: ItiBedrockGatewayClient.DefaultVisionModel,
-                cancellationToken: cancellationToken)
+                cancellationToken: cancellationToken,
+                usageContext: new ItiAiRequestContext(
+                    AiFeatureNames.DiseaseConversation,
+                    request.OwnerUserId,
+                    ExportPlanId: request.ExportPlanId))
             : await gatewayClient.ChatAsync(
                 systemPrompt,
                 [new ItiChatMessage("user", prompt)],
                 modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                usageContext: new ItiAiRequestContext(
+                    AiFeatureNames.DiseaseConversation,
+                    request.OwnerUserId,
+                    ExportPlanId: request.ExportPlanId));
 
         TurnPayload payload;
         try
@@ -77,7 +85,11 @@ public sealed class DiagnosisConversationAiService(
                 systemPrompt,
                 [new ItiChatMessage("user", repairPrompt)],
                 modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                usageContext: new ItiAiRequestContext(
+                    AiFeatureNames.DiseaseConversationRepair,
+                    request.OwnerUserId,
+                    ExportPlanId: request.ExportPlanId));
             payload = ParsePayload(repaired);
         }
 

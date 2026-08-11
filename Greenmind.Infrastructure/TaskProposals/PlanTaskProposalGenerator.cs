@@ -17,7 +17,8 @@ public sealed class PlanTaskProposalGenerator : IPlanTaskProposalGenerator
     public async Task<IReadOnlyList<GeneratedTaskChangeItem>> TryGenerateAsync(
         string userRequest,
         string planContextJson,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? exportPlanId = null)
     {
         var systemPrompt =
             """
@@ -48,7 +49,10 @@ public sealed class PlanTaskProposalGenerator : IPlanTaskProposalGenerator
             systemPrompt,
             [new ItiChatMessage("user", userPrompt)],
             modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            usageContext: new ItiAiRequestContext(
+                AiFeatureNames.TaskChangeProposal,
+                ExportPlanId: exportPlanId));
         try
         {
             var payload = JsonSerializer.Deserialize<ProposalPayload>(

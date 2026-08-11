@@ -219,7 +219,8 @@ public sealed class ConversationAiServiceTests
             string? systemPrompt,
             IReadOnlyList<ItiChatMessage> messages,
             string? modelId = null,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            ItiAiRequestContext? usageContext = null) =>
             throw new InvalidOperationException("The deterministic regulatory path must not call the model.");
 
         public Task<string> MultimodalChatAsync(
@@ -228,7 +229,8 @@ public sealed class ConversationAiServiceTests
             IReadOnlyList<ItiImageInput> images,
             int maxTokens = 1200,
             string? modelId = null,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            ItiAiRequestContext? usageContext = null) =>
             throw new InvalidOperationException("The deterministic regulatory path must not call the model.");
 
     }

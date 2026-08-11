@@ -331,6 +331,7 @@ public sealed class SupportConversationConfiguration : IEntityTypeConfiguration<
         builder.ToTable("SupportConversations");
         builder.Property(item => item.IsClosed).HasDefaultValue(false);
         builder.HasIndex(item => new { item.FarmId, item.IsClosed, item.LastMessageAtUtc });
+        builder.HasIndex(item => new { item.LastMessageAtUtc, item.Id });
         builder.HasIndex(item => item.FarmId)
             .IsUnique()
             .HasFilter("[IsClosed] = 0");

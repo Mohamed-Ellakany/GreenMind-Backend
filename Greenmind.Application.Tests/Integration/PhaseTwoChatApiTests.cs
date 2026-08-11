@@ -45,18 +45,24 @@ public sealed class PhaseTwoChatApiTests(GreenmindApiFactory factory)
             IdempotencyKey = Guid.NewGuid().ToString()
         };
 
-        var streamResponse = await ownerClient.PostAsJsonAsync(
-            $"/api/export-plans/{ownedPlanId}/chat/sessions/{created.Data.Id}/messages/stream",
-            request);
-        Assert.Equal(HttpStatusCode.OK, streamResponse.StatusCode);
-        Assert.Equal("text/event-stream", streamResponse.Content.Headers.ContentType?.MediaType);
+        var streamUrl =
+            $"/api/export-plans/{ownedPlanId}/chat/sessions/{created.Data.Id}/messages/stream";
+        var streamResponses = await Task.WhenAll(
+            ownerClient.PostAsJsonAsync(streamUrl, request),
+            ownerClient.PostAsJsonAsync(streamUrl, request));
+        Assert.All(streamResponses, response =>
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+        });
 
-        var streamBody = await streamResponse.Content.ReadAsStringAsync();
-        Assert.Contains("event: delta", streamBody);
-        Assert.Contains("event: completed", streamBody);
+        var streamBodies = await Task.WhenAll(
+            streamResponses.Select(response => response.Content.ReadAsStringAsync()));
+        Assert.Contains(streamBodies, body => body.Contains("event: delta"));
+        Assert.All(streamBodies, body => Assert.Contains("event: completed", body));
 
         var replayResponse = await ownerClient.PostAsJsonAsync(
-            $"/api/export-plans/{ownedPlanId}/chat/sessions/{created.Data.Id}/messages/stream",
+            streamUrl,
             request);
         Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
 

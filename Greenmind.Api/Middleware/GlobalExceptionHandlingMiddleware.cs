@@ -1,6 +1,7 @@
 using Greenmind.Api.Logging;
 using Greenmind.Application.Contracts.Api;
 using System.Text.Json;
+using Greenmind.Infrastructure.Iti;
 
 namespace Greenmind.Api.Middleware;
 
@@ -29,6 +30,29 @@ public sealed class GlobalExceptionHandlingMiddleware(RequestDelegate next, ILog
             {
                 context.Response.Clear();
                 context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+            }
+        }
+        catch (AiAccessSuspendedException exception)
+        {
+            _logger.LogInformation(
+                "Blocked suspended AI account from {Method} {Path}. TraceId: {TraceId}",
+                context.Request.Method,
+                context.Request.Path.Value,
+                context.TraceIdentifier);
+
+            if (!context.Response.HasStarted)
+            {
+                context.Response.Clear();
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json";
+                await JsonSerializer.SerializeAsync(
+                    context.Response.Body,
+                    ApiResponseFactory.FromStatusCode<object?>(
+                        StatusCodes.Status403Forbidden,
+                        context.TraceIdentifier,
+                        exception.Message),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web),
+                    context.RequestAborted);
             }
         }
         catch (Exception exception)

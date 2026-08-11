@@ -31,14 +31,15 @@ namespace Greenmind.Infrastructure.Agents
             var systemPrompt = _promptBuilder.BuildSystemPrompt(request);   
             var userPrompt = _promptBuilder.BuildUserPrompt(request);
             var complianceContext = await BuildComplianceContextAsync(request);
-            var response = await GenerateAsync(systemPrompt, userPrompt, complianceContext);
+            var response = await GenerateAsync(systemPrompt, userPrompt, complianceContext, request.ExportPlan.ExportPlanId);
             response.Tasks ??= [];
             if (response.Tasks.Any(task => !IsValidArabicTask(task)))
             {
                 response = await GenerateAsync(
                     systemPrompt + "\nكل قيم title وdescription وunit وpriority داخل tasks يجب أن تكون عربية بالكامل، ويجب إرسال quantity موجب وunit عربي لكل مهمة، مع الإبقاء على taskTypeName كما هو.",
                     userPrompt,
-                    complianceContext);
+                    complianceContext,
+                    request.ExportPlan.ExportPlanId);
                 response.Tasks ??= [];
             }
 
@@ -54,14 +55,18 @@ namespace Greenmind.Infrastructure.Agents
         private async Task<AgentResponse> GenerateAsync(
             string systemPrompt,
             string userPrompt,
-            string complianceContext)
+            string complianceContext,
+            int exportPlanId)
         {
             var json = await _gatewayClient.ChatAsync(
                 systemPrompt,
                 [new ItiChatMessage(
                     "user",
                     $"{userPrompt}\n\nAuthoritative compliance search results:\n{complianceContext}")],
-                modelId: ItiBedrockGatewayClient.DefaultStructuredModel);
+                modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
+                usageContext: new ItiAiRequestContext(
+                    AiFeatureNames.ExportPlanTaskGeneration,
+                    ExportPlanId: exportPlanId));
 
             return JsonSerializer.Deserialize<AgentResponse>(ItiJson.ExtractObject(json), new JsonSerializerOptions
             {
