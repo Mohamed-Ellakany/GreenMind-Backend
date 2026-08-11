@@ -121,7 +121,11 @@ public sealed class ChatService(
                 session.FarmId,
                 session.ExportPlanId,
                 session.Scope,
-                session.Title,
+                session.Messages
+                    .Where(message => message.Role == ChatMessageRole.User)
+                    .OrderBy(message => message.Id)
+                    .Select(message => message.Content)
+                    .FirstOrDefault() ?? session.Title,
                 session.IsActive,
                 session.CreatedAt,
                 session.UpdatedAtUtc))
@@ -233,6 +237,12 @@ public sealed class ChatService(
 
             if (existingUserMessage is null)
             {
+                var isFirstFarmQuestion = scope == ChatScope.Farm
+                    && !string.IsNullOrWhiteSpace(request.Content)
+                    && !await dbContext.ChatMessages.AnyAsync(
+                        message => message.ChatSessionId == session.Id
+                            && message.Role == ChatMessageRole.User,
+                        cancellationToken);
                 userMessage = new ChatMessage
                 {
                     ChatSessionId = session.Id,
@@ -242,6 +252,8 @@ public sealed class ChatService(
                     IdempotencyKey = normalizedKey
                 };
                 dbContext.ChatMessages.Add(userMessage);
+                if (isFirstFarmQuestion)
+                    session.Title = BuildQuestionTitle(request.Content);
                 session.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
                 try
                 {
@@ -754,6 +766,14 @@ public sealed class ChatService(
 
     private static string BuildReplyReference(int userMessageId) =>
         $"{{\"replyToMessageId\":{userMessageId}}}";
+
+    private static string BuildQuestionTitle(string content)
+    {
+        var normalized = string.Join(
+            ' ',
+            content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return normalized[..Math.Min(normalized.Length, 200)];
+    }
 
     private static async IAsyncEnumerable<ChatStreamEventDto> ReplayAsync(
         ChatMessageDto message)

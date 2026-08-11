@@ -107,6 +107,24 @@ public sealed class PhaseTwoChatApiTests(GreenmindApiFactory factory)
         Assert.NotNull(created?.Data);
         Assert.Equal(ChatScope.Farm, created!.Data!.Scope);
         Assert.Null(created.Data.ExportPlanId);
+
+        const string firstQuestion = "ما المهام المتأخرة التي تحتاج تدخلي اليوم؟";
+        var streamResponse = await client.PostAsJsonAsync(
+            $"/api/farm/chat/sessions/{created.Data.Id}/messages/stream",
+            new SendChatMessageRequest
+            {
+                Content = firstQuestion,
+                IdempotencyKey = Guid.NewGuid().ToString()
+            });
+        Assert.Equal(HttpStatusCode.OK, streamResponse.StatusCode);
+
+        var sessionsResponse = await client.GetAsync("/api/farm/chat/sessions");
+        var sessions = await sessionsResponse.Content
+            .ReadFromJsonAsync<ApiResponse<IReadOnlyList<ChatSessionDto>>>(JsonOptions);
+        var renamedSession = Assert.Single(
+            sessions!.Data!,
+            session => session.Id == created.Data.Id);
+        Assert.Equal(firstQuestion, renamedSession.Title);
     }
 
     private HttpClient CreateOwnerClient(string userId)
