@@ -115,6 +115,24 @@ public sealed class ConversationAiServiceTests
         Assert.Contains("موجودة", reply);
     }
 
+    [Fact]
+    public async Task GeneralAdvisor_BlocksProgrammingQuestionsWithoutCallingModel()
+    {
+        var request = BuildRequest("اكتب لي كود C# لحساب factorial");
+        var service = new ConversationAiService(
+            new ModelMustNotBeCalled(),
+            new RegulatoryKnowledgeStub());
+        var chunks = new List<string>();
+
+        await foreach (var chunk in service.StreamReplyAsync(request))
+            chunks.Add(chunk);
+
+        var reply = string.Concat(chunks);
+        Assert.Contains("لا يسمح", reply);
+        Assert.Contains("الزراعة", reply);
+        Assert.Contains("كل ما يتعلق بها", reply);
+    }
+
     private static ConversationAiRequest BuildRequest(
         string userMessage,
         params ConversationHistoryItem[] recentMessages) =>

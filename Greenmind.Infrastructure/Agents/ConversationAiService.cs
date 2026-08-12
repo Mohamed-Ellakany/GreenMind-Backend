@@ -15,6 +15,9 @@ public sealed class ConversationAiService(
     IRegulatoryKnowledgeQueryService regulatoryQueryService,
     ComplianceRagPlugin? complianceRag = null) : IConversationAiService
 {
+    private const string OutOfScopeReply =
+        "عذرًا، لا يسمح هذا النموذج بالتواصل في مجال خارج المحتوى الأساسي للمشروع، وهو الزراعة وكل ما يتعلق بها.";
+
     public async IAsyncEnumerable<string> StreamReplyAsync(
         ConversationAiRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -25,6 +28,12 @@ public sealed class ConversationAiService(
         if (deterministicRegulatoryReply is not null)
         {
             yield return deterministicRegulatoryReply;
+            yield break;
+        }
+
+        if (!IsAgricultureRelated(request))
+        {
+            yield return OutOfScopeReply;
             yield break;
         }
 
@@ -128,6 +137,39 @@ public sealed class ConversationAiService(
 
     private static bool ContainsAny(string value, params string[] terms) =>
         terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+    internal static bool IsAgricultureRelated(ConversationAiRequest request)
+    {
+        if (request.Images is { Count: > 0 })
+            return true;
+
+        if (ContainsAgricultureScopeTerm(request.UserMessage))
+            return true;
+
+        var isShortFollowUp = request.UserMessage.Trim().Length <= 120;
+        return isShortFollowUp &&
+               request.RecentMessages.Any(item => ContainsAgricultureScopeTerm(item.Content));
+    }
+
+    private static bool ContainsAgricultureScopeTerm(string value)
+    {
+        string[] terms =
+        [
+            "زراع", "محصول", "محاصيل", "مزرعة", "مزارع", "أرض", "ارض", "حقل", "صوب", "صوبة",
+            "تربة", "ري", "مياه", "رطوبة", "سماد", "تسميد", "كمبوست", "نيتروجين", "فوسفور", "بوتاسيوم",
+            "مبيد", "مبيدات", "المادة الفعالة", "متبقيات", "فترة الأمان", "mrl", "phi", "pesticide",
+            "آفة", "افة", "حشرة", "فطر", "مرض", "أمراض", "علاج", "أعراض", "اصابة", "إصابة",
+            "ورق", "أوراق", "جذر", "جذور", "ثمار", "زهور", "نبات", "نباتات", "شتلة", "شتلات",
+            "فراولة", "طماطم", "بطاطس", "عنب", "برتقال", "خيار", "فلفل", "مانجو", "قمح", "ذرة",
+            "حصاد", "زراعة", "تصدير", "تعبئة", "جودة", "تصنيف", "شهادة", "اشتراطات", "الاتحاد الأوروبي",
+            "خطة", "مهام", "مهمة", "ميزانية", "تكلفة", "تكاليف", "مصروف", "مصروفات", "تأخير", "متأخرة",
+            "farm", "farmer", "crop", "crops", "soil", "irrigation", "fertilizer", "compost",
+            "harvest", "plant", "plants", "seedling", "disease", "treatment", "symptom", "pest",
+            "export", "quality", "grading", "packaging", "phytosanitary", "residue", "budget", "task"
+        ];
+
+        return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
 
     internal static bool RequiresRegulatoryLookup(ConversationAiRequest request)
     {
