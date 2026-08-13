@@ -56,74 +56,94 @@ public class AuthController : ControllerBase
         if (existing is not null)
             return Conflict(new { Message = "Email already in use." });
 
-        // Begin transaction to ensure user + farm created atomically
-        await using var tx = await _db.Database.BeginTransactionAsync();
+        var strategy = _db.Database.CreateExecutionStrategy();
 
-        var user = new ApplicationUser
-        {
-            UserName = request.Email,
-            Email = request.Email,
-            FullName = request.FullName,
-            IsActive = false // new users are inactive pending admin approval
-        };
+        ApplicationUser? createdUser = null;
+        Farm? createdFarm = null;
 
-        var createResult = await _userManager.CreateAsync(user, request.Password);
-        if (!createResult.Succeeded)
+        var executionResult = await strategy.ExecuteAsync<IActionResult?>(async () =>
         {
-            await _db.Database.RollbackTransactionAsync();
-            return BadRequest(new { Errors = createResult.Errors.Select(e => e.Description) });
-        }
+            await using var tx = await _db.Database.BeginTransactionAsync();
 
-        // Ensure role exists
-        if (!await _roleManager.RoleExistsAsync(FarmOwnerRole))
-        {
-            var roleResult = await _roleManager.CreateAsync(new IdentityRole(FarmOwnerRole));
-            if (!roleResult.Succeeded)
+            var user = new ApplicationUser
             {
-                await _db.Database.RollbackTransactionAsync();
-                await _userManager.DeleteAsync(user);
-                return StatusCode(500, new { Message = "Failed to create role." });
+                UserName = request.Email,
+                Email = request.Email,
+                FullName = request.FullName,
+                IsActive = false // new users are inactive pending admin approval
+            };
+
+            var createResult = await _userManager.CreateAsync(user, request.Password);
+            if (!createResult.Succeeded)
+            {
+                await tx.RollbackAsync();
+                return BadRequest(new { Errors = createResult.Errors.Select(e => e.Description) });
             }
-        }
 
-        var addRoleResult = await _userManager.AddToRoleAsync(user, FarmOwnerRole);
-        if (!addRoleResult.Succeeded)
-        {
-            await _db.Database.RollbackTransactionAsync();
-            await _userManager.DeleteAsync(user);
-            return StatusCode(500, new { Message = "Failed to assign role." });
-        }
-
-        // Create farm linked to owner
-        var farm = new Farm
-        {
-            Name = request.FarmName,
-            OwnerUserId = user.Id
-        };
-
-        await _unitOfWork.Farms.AddAsync(farm);
-        await _unitOfWork.SaveChangesAsync();
-
-        _db.ExpenseCategories.AddRange(DefaultExpenseCategories.ArabicNames.Select(name =>
-            new ExpenseCategory
+            // Ensure role exists
+            if (!await _roleManager.RoleExistsAsync(FarmOwnerRole))
             {
-                FarmId = farm.Id,
-                Name = name,
-                IsDefault = true
-            }));
-        await _unitOfWork.SaveChangesAsync();
+                var roleResult = await _roleManager.CreateAsync(new IdentityRole(FarmOwnerRole));
+                if (!roleResult.Succeeded)
+                {
+                    await tx.RollbackAsync();
+                    return StatusCode(500, new { Message = "Failed to create role." });
+                }
+            }
 
-        await tx.CommitAsync();
+            var addRoleResult = await _userManager.AddToRoleAsync(user, FarmOwnerRole);
+            if (!addRoleResult.Succeeded)
+            {
+                await tx.RollbackAsync();
+                return StatusCode(500, new { Message = "Failed to assign role." });
+            }
 
-        await TrySendRegistrationEmailsAsync(user, farm);
+            // Create farm linked to owner
+            var farm = new Farm
+            {
+                Name = request.FarmName,
+                OwnerUserId = user.Id
+            };
 
-        var response = new RegisterResponse
+            await _unitOfWork.Farms.AddAsync(farm);
+            await _unitOfWork.SaveChangesAsync();
+
+            _db.ExpenseCategories.AddRange(DefaultExpenseCategories.ArabicNames.Select(name =>
+                new ExpenseCategory
+                {
+                    FarmId = farm.Id,
+                    Name = name,
+                    IsDefault = true
+                }));
+            await _unitOfWork.SaveChangesAsync();
+
+            await tx.CommitAsync();
+
+            createdUser = user;
+            createdFarm = farm;
+
+            return null;
+        });
+
+        if (executionResult is not null)
         {
-            UserId = user.Id,
-            Email = user.Email!,
-            FarmId = farm.Id.ToString()
-        };
-        return CreatedAtAction(nameof(Register), response);
+            return executionResult;
+        }
+
+        if (createdUser is not null && createdFarm is not null)
+        {
+            await TrySendRegistrationEmailsAsync(createdUser, createdFarm);
+
+            var response = new RegisterResponse
+            {
+                UserId = createdUser.Id,
+                Email = createdUser.Email!,
+                FarmId = createdFarm.Id.ToString()
+            };
+            return CreatedAtAction(nameof(Register), response);
+        }
+
+        return StatusCode(500, new { Message = "Registration failed unexpectedly." });
     }
 
     [HttpPost("login")]
