@@ -121,38 +121,42 @@ public sealed partial class RegulatoryDataImportService(
         IReadOnlyCollection<ActiveSubstance> items,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await BeginTransactionIfSupportedAsync(cancellationToken);
-        try
+        var strategy = context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            var now = timeProvider.GetUtcNow().UtcDateTime;
-            var currentItems = await context.ActiveSubstances
-                .Where(item => item.RegionName == regionName && !item.IsDeleted)
-                .ToListAsync(cancellationToken);
-
-            foreach (var item in currentItems)
+            await using var transaction = await BeginTransactionIfSupportedAsync(cancellationToken);
+            try
             {
-                item.IsDeleted = true;
-                item.DeletedAt = now;
+                var now = timeProvider.GetUtcNow().UtcDateTime;
+                var currentItems = await context.ActiveSubstances
+                    .Where(item => item.RegionName == regionName && !item.IsDeleted)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var item in currentItems)
+                {
+                    item.IsDeleted = true;
+                    item.DeletedAt = now;
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+                await context.ActiveSubstances.AddRangeAsync(items, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+
+                if (transaction is not null)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                }
             }
-
-            await context.SaveChangesAsync(cancellationToken);
-            await context.ActiveSubstances.AddRangeAsync(items, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-
-            if (transaction is not null)
+            catch
             {
-                await transaction.CommitAsync(cancellationToken);
-            }
-        }
-        catch
-        {
-            if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
+                if (transaction is not null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
 
-            throw;
-        }
+                throw;
+            }
+        });
     }
 
     private async Task ReplaceProductMrlsAsync(
@@ -161,40 +165,44 @@ public sealed partial class RegulatoryDataImportService(
         IReadOnlyCollection<ProductMrl> items,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await BeginTransactionIfSupportedAsync(cancellationToken);
-        try
+        var strategy = context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            var now = timeProvider.GetUtcNow().UtcDateTime;
-            var currentItems = await context.ProductMrls
-                .Where(item => item.RegionName == regionName
-                    && item.ProductType == productType
-                    && !item.IsDeleted)
-                .ToListAsync(cancellationToken);
-
-            foreach (var item in currentItems)
+            await using var transaction = await BeginTransactionIfSupportedAsync(cancellationToken);
+            try
             {
-                item.IsDeleted = true;
-                item.DeletedAt = now;
+                var now = timeProvider.GetUtcNow().UtcDateTime;
+                var currentItems = await context.ProductMrls
+                    .Where(item => item.RegionName == regionName
+                        && item.ProductType == productType
+                        && !item.IsDeleted)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var item in currentItems)
+                {
+                    item.IsDeleted = true;
+                    item.DeletedAt = now;
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+                await context.ProductMrls.AddRangeAsync(items, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+
+                if (transaction is not null)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                }
             }
-
-            await context.SaveChangesAsync(cancellationToken);
-            await context.ProductMrls.AddRangeAsync(items, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-
-            if (transaction is not null)
+            catch
             {
-                await transaction.CommitAsync(cancellationToken);
-            }
-        }
-        catch
-        {
-            if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
+                if (transaction is not null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
 
-            throw;
-        }
+                throw;
+            }
+        });
     }
 
     private ParsedRows<ActiveSubstance> ParseActiveSubstances(XlsxTable table, string regionName)
