@@ -148,10 +148,11 @@ public sealed class InitialExportPlanPlanningService(
         var cutoff = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-10);
         var unfinished = await db.ExportPlans
             .Where(plan =>
-                plan.PlanningStatus == PlanningGenerationStatus.Failed ||
-                plan.GeneratedTaskCount > 0 ||
-                (plan.PlanningStatus == PlanningGenerationStatus.InProgress &&
-                 plan.PlanningStartedAtUtc < cutoff))
+                plan.PlanningStatus != PlanningGenerationStatus.Succeeded &&
+                (plan.PlanningStatus == PlanningGenerationStatus.Failed ||
+                 plan.GeneratedTaskCount > 0 ||
+                 (plan.PlanningStatus == PlanningGenerationStatus.InProgress &&
+                  plan.PlanningStartedAtUtc < cutoff)))
             .ToListAsync(cancellationToken);
 
         var changed = false;

@@ -34,11 +34,12 @@ public sealed class ScheduleRevisionWorker(
                 await using (var scope = scopeFactory.CreateAsyncScope())
                 {
                     var db = scope.ServiceProvider.GetRequiredService<GreenmindDbContext>();
-                    var revision = await db.ScheduleRevisions
+                    revisionId = await db.ScheduleRevisions
+                        .AsNoTracking()
                         .Where(item => item.Status == ScheduleRevisionStatus.Pending)
                         .OrderBy(item => item.CreatedAt)
+                        .Select(item => (int?)item.Id)
                         .FirstOrDefaultAsync(stoppingToken);
-                    revisionId = revision?.Id;
                 }
                 if (revisionId.HasValue)
                 {
