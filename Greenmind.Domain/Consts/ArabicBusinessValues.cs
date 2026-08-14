@@ -84,6 +84,18 @@ public static class ArabicBusinessValues
             [ExpenseAttachmentType.Other] = "أخرى"
         };
 
+    private static readonly IReadOnlyDictionary<ExportPlanStatus, string> ExportPlanStatuses =
+        new Dictionary<ExportPlanStatus, string>
+        {
+            [ExportPlanStatus.Draft] = "مسودة",
+            [ExportPlanStatus.Planning] = "قيد التخطيط",
+            [ExportPlanStatus.InProgress] = "قيد التنفيذ",
+            [ExportPlanStatus.ReadyForExport] = "جاهز للتصدير",
+            [ExportPlanStatus.Completed] = "مكتمل",
+            [ExportPlanStatus.Cancelled] = "ملغي",
+            [ExportPlanStatus.AwaitingFarmData] = "بانتظار اكتمال بيانات المزرعة"
+        };
+
     public static IReadOnlyDictionary<TEnum, string> For<TEnum>() where TEnum : struct, Enum
     {
         object values = typeof(TEnum) == typeof(ChatScope) ? ChatScopes
@@ -95,6 +107,7 @@ public static class ArabicBusinessValues
             : typeof(TEnum) == typeof(DiseaseSeverity) ? DiseaseSeverities
             : typeof(TEnum) == typeof(ExpensePaymentMethod) ? PaymentMethods
             : typeof(TEnum) == typeof(ExpenseAttachmentType) ? AttachmentTypes
+            : typeof(TEnum) == typeof(ExportPlanStatus) ? ExportPlanStatuses
             : throw new NotSupportedException($"{typeof(TEnum).Name} is not a Phase Two business enum.");
 
         return (IReadOnlyDictionary<TEnum, string>)values;

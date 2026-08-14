@@ -54,6 +54,63 @@ public sealed class ExportPlanCreateRequest : IValidatableObject
     [MaxLength(1000)]
     public string? Notes { get; init; }
 
+    [MaxLength(50)]
+    public string? FarmType { get; init; }
+
+    [MaxLength(50)]
+    public string? SoilType { get; init; }
+
+    [Range(0d, 14d)]
+    public double? SoilPh { get; init; }
+
+    [Range(0d, 100d)]
+    public double? SoilEc { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? SoilNitrogen { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? SoilPhosphorus { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? SoilPotassium { get; init; }
+
+    [Range(0d, 100d)]
+    public double? SoilOrganicMatter { get; init; }
+
+    [Range(0d, 14d)]
+    public double? WaterPh { get; init; }
+
+    [Range(0d, 100d)]
+    public double? WaterEc { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterSalinity { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterSodium { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterChloride { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterBicarbonate { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterCalcium { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterMagnesium { get; init; }
+
+    [Range(0d, 1000d)]
+    public double? WaterSar { get; init; }
+
+    [MaxLength(50)]
+    public string? IrrigationSystem { get; init; }
+
+    [MaxLength(50)]
+    public string? Fertigation { get; init; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (PlantingDate.HasValue && ExpectedHarvestDate.HasValue &&
@@ -73,6 +130,98 @@ public sealed class ExportPlanCreateRequest : IValidatableObject
         }
     }
 }
+
+public sealed class ExportPlanFarmDataUpdateRequest
+{
+    [MaxLength(50)]
+    public string? FarmType { get; init; }
+
+    [MaxLength(50)]
+    public string? SoilType { get; init; }
+
+    [Range(0d, 14d)]
+    public double? SoilPh { get; init; }
+
+    [Range(0d, 100d)]
+    public double? SoilEc { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? SoilNitrogen { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? SoilPhosphorus { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? SoilPotassium { get; init; }
+
+    [Range(0d, 100d)]
+    public double? SoilOrganicMatter { get; init; }
+
+    [Range(0d, 14d)]
+    public double? WaterPh { get; init; }
+
+    [Range(0d, 100d)]
+    public double? WaterEc { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterSalinity { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterSodium { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterChloride { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterBicarbonate { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterCalcium { get; init; }
+
+    [Range(0d, 100000d)]
+    public double? WaterMagnesium { get; init; }
+
+    [Range(0d, 1000d)]
+    public double? WaterSar { get; init; }
+
+    [MaxLength(50)]
+    public string? IrrigationSystem { get; init; }
+
+    [MaxLength(50)]
+    public string? Fertigation { get; init; }
+}
+
+public sealed record SoilAnalysisSummaryDto(
+    double? Ph,
+    double? Ec,
+    double? Nitrogen,
+    double? Phosphorus,
+    double? Potassium,
+    double? OrganicMatter,
+    bool IsCompleted);
+
+public sealed record WaterAnalysisSummaryDto(
+    double? Ph,
+    double? Ec,
+    double? Salinity,
+    double? Sodium,
+    double? Chloride,
+    double? Bicarbonate,
+    double? Calcium,
+    double? Magnesium,
+    double? Sar,
+    bool IsCompleted);
+
+public sealed record FarmDataSummaryDto(
+    string? FarmType,
+    string? SoilType,
+    string? IrrigationSystem,
+    string? Fertigation,
+    SoilAnalysisSummaryDto SoilAnalysis,
+    WaterAnalysisSummaryDto WaterAnalysis,
+    bool IsFarmDataReady,
+    int CompletedStepsCount,
+    int TotalStepsCount);
 
 public sealed class ExportPlanScheduleAnalysisRequest : IValidatableObject
 {
@@ -214,7 +363,11 @@ public sealed record ExportPlanListItemDto(
     DateOnly ExpectedExportDate,
     string Status,
     string PlanningStatus,
-    int GeneratedTaskCount);
+    int GeneratedTaskCount,
+    bool IsFarmDataReady = false,
+    string? FarmType = null,
+    string? SoilType = null,
+    string? IrrigationSystem = null);
 
 public sealed record ExportPlanDetailsDto(
     int Id,
@@ -236,7 +389,32 @@ public sealed record ExportPlanDetailsDto(
     string? Notes,
     string PlanningStatus,
     int GeneratedTaskCount,
-    string? PlanningFailureMessage);
+    string? PlanningFailureMessage,
+    string? FarmType = null,
+    string? SoilType = null,
+    string? IrrigationSystem = null,
+    string? Fertigation = null,
+    SoilAnalysisSummaryDto? SoilAnalysis = null,
+    WaterAnalysisSummaryDto? WaterAnalysis = null,
+    bool IsFarmDataReady = false,
+    int FarmDataCompletedCount = 0,
+    bool IsSoilAnalysisCompleted = false,
+    bool IsWaterAnalysisCompleted = false,
+    double? SoilPh = null,
+    double? SoilEc = null,
+    double? SoilNitrogen = null,
+    double? SoilPhosphorus = null,
+    double? SoilPotassium = null,
+    double? SoilOrganicMatter = null,
+    double? WaterPh = null,
+    double? WaterEc = null,
+    double? WaterSalinity = null,
+    double? WaterSodium = null,
+    double? WaterChloride = null,
+    double? WaterBicarbonate = null,
+    double? WaterCalcium = null,
+    double? WaterMagnesium = null,
+    double? WaterSar = null);
 
 public sealed record PlanningStatusDto(
     int ExportPlanId,

@@ -32,6 +32,17 @@ public interface IExportPlanService
         int exportPlanId,
         string ownerUserId,
         CancellationToken cancellationToken = default);
+
+    Task<ExportPlanResult<ExportPlanDetailsDto>> UpdateFarmDataAsync(
+        int exportPlanId,
+        string ownerUserId,
+        ExportPlanFarmDataUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ExportPlanResult<ExportPlanDetailsDto>> StartTasksAsync(
+        int exportPlanId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IExportScheduleAdvisor

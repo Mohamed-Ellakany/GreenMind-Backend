@@ -35,8 +35,9 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         Assert.Equal("Summer Strawberry Plan", created.Name);
         Assert.Equal("Strawberry", created.Crop);
         Assert.True(created.SupportsSmartDiagnosis);
-        Assert.Equal(ExportPlanStatus.Planning.ToString(), created.Status);
+        Assert.Equal(ExportPlanStatus.AwaitingFarmData.ToString(), created.Status);
         Assert.Equal(PlanningGenerationStatus.Pending.ToString(), created.PlanningStatus);
+        Assert.False(created.IsFarmDataReady);
         Assert.Equal(0, created.GeneratedTaskCount);
         Assert.Equal(29.9, created.Latitude);
         Assert.Equal(30.9, created.Longitude);
@@ -55,6 +56,36 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
         Assert.Equal(created, details);
         Assert.Equal(29.9, details.Latitude);
         Assert.Equal(30.9, details.Longitude);
+
+        // Update farm data to complete status
+        var updateFarmResponse = await client.PutAsJsonAsync(
+            $"/api/farm-owner/export-plans/{created.Id}/farm-data",
+            new ExportPlanFarmDataUpdateRequest
+            {
+                FarmType = "صوب زراعية",
+                SoilType = "طينية",
+                IrrigationSystem = "تنقيط",
+                Fertigation = "نعم",
+                SoilPh = 6.5,
+                SoilEc = 1.8,
+                SoilNitrogen = 45,
+                SoilPhosphorus = 30,
+                SoilPotassium = 200,
+                SoilOrganicMatter = 2.5,
+                WaterPh = 7.0,
+                WaterEc = 0.8,
+                WaterSalinity = 500,
+                WaterSodium = 25,
+                WaterChloride = 30,
+                WaterBicarbonate = 120,
+                WaterCalcium = 40,
+                WaterMagnesium = 15,
+                WaterSar = 1.2
+            });
+        Assert.Equal(HttpStatusCode.OK, updateFarmResponse.StatusCode);
+        var updatedDetails = await ReadDataAsync<ExportPlanDetailsDto>(updateFarmResponse);
+        Assert.True(updatedDetails.IsFarmDataReady);
+        Assert.Equal(ExportPlanStatus.Planning.ToString(), updatedDetails.Status);
     }
 
     [Fact]
@@ -185,6 +216,85 @@ public sealed class ExportPlansApiTests(GreenmindApiFactory factory)
 
         Assert.DoesNotContain(plans, plan => plan.Id == otherPlanId);
         Assert.Equal(HttpStatusCode.NotFound, detailsResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Owner_CanCreateExportPlanWithFullFarmData_StartsInPlanning()
+    {
+        using var client = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var analysis = await AnalyzeScheduleAsync(client, CreateAnalysisRequest());
+
+        var req = CreateRequest(
+            plantingDate: analysis.PlantingDate,
+            expectedHarvestDate: analysis.ExpectedHarvestDate,
+            expectedExportDate: analysis.ExpectedExportDate,
+            analysisToken: analysis.AnalysisToken);
+
+        var fullReq = new ExportPlanCreateRequest
+        {
+            Name = req.Name,
+            CropId = req.CropId,
+            DestinationId = req.DestinationId,
+            Governorate = req.Governorate,
+            City = req.City,
+            Latitude = req.Latitude,
+            Longitude = req.Longitude,
+            AreaInFeddan = req.AreaInFeddan,
+            PlantingDate = req.PlantingDate,
+            ExpectedHarvestDate = req.ExpectedHarvestDate,
+            ExpectedExportDate = req.ExpectedExportDate,
+            Notes = req.Notes,
+            AnalysisToken = req.AnalysisToken,
+            FarmType = "أرض مفتوحة",
+            SoilType = "رملية",
+            IrrigationSystem = "تنقيط",
+            Fertigation = "نعم",
+            SoilPh = 7.0,
+            SoilEc = 1.5,
+            SoilNitrogen = 50,
+            SoilPhosphorus = 25,
+            SoilPotassium = 180,
+            SoilOrganicMatter = 2.0,
+            WaterPh = 7.2,
+            WaterEc = 0.9,
+            WaterSalinity = 600,
+            WaterSodium = 30,
+            WaterChloride = 35,
+            WaterBicarbonate = 140,
+            WaterCalcium = 45,
+            WaterMagnesium = 18,
+            WaterSar = 1.4
+        };
+
+        var response = await client.PostAsJsonAsync("/api/farm-owner/export-plans", fullReq);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await ReadDataAsync<ExportPlanDetailsDto>(response);
+        Assert.True(created.IsFarmDataReady);
+        Assert.Equal(ExportPlanStatus.Planning.ToString(), created.Status);
+    }
+
+    [Fact]
+    public async Task Owner_CannotStartTasksWhenFarmDataIncomplete()
+    {
+        using var client = CreateFarmOwnerClient(GreenmindApiFactory.FarmOwnerUserId);
+        var analysis = await AnalyzeScheduleAsync(client, CreateAnalysisRequest());
+
+        var createResponse = await client.PostAsJsonAsync(
+            "/api/farm-owner/export-plans",
+            CreateRequest(
+                plantingDate: analysis.PlantingDate,
+                expectedHarvestDate: analysis.ExpectedHarvestDate,
+                expectedExportDate: analysis.ExpectedExportDate,
+                analysisToken: analysis.AnalysisToken));
+
+        var created = await ReadDataAsync<ExportPlanDetailsDto>(createResponse);
+        Assert.False(created.IsFarmDataReady);
+
+        var startResponse = await client.PostAsync(
+            $"/api/farm-owner/export-plans/{created.Id}/start-tasks",
+            null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, startResponse.StatusCode);
     }
 
     private async Task<int> AddInactiveCropAsync()

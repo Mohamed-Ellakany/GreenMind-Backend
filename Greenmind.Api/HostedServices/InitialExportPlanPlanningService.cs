@@ -65,6 +65,7 @@ public sealed class InitialExportPlanPlanningService(
             var candidate = await db.ExportPlans
                 .Where(plan =>
                     plan.PlanningStatus == PlanningGenerationStatus.Pending &&
+                    plan.Status != ExportPlanStatus.AwaitingFarmData &&
                     (plan.NextPlanningAttemptAtUtc == null || plan.NextPlanningAttemptAtUtc <= now))
                 .OrderBy(plan => plan.PlanningRequestedAtUtc)
                 .FirstOrDefaultAsync(cancellationToken);

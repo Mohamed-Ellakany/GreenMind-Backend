@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -25,5 +25,24 @@ namespace Greenmind.Application.Dtos.AI
         public int? CurrentSeasonDay { get; set; }
         public string? GrowthStage { get; set; }
         public string? Notes { get; set; }
+        public string? FarmType { get; set; }
+        public string? SoilType { get; set; }
+        public string? IrrigationSystem { get; set; }
+        public string? Fertigation { get; set; }
+        public double? SoilPh { get; set; }
+        public double? SoilEc { get; set; }
+        public double? SoilNitrogen { get; set; }
+        public double? SoilPhosphorus { get; set; }
+        public double? SoilPotassium { get; set; }
+        public double? SoilOrganicMatter { get; set; }
+        public double? WaterPh { get; set; }
+        public double? WaterEc { get; set; }
+        public double? WaterSalinity { get; set; }
+        public double? WaterSodium { get; set; }
+        public double? WaterChloride { get; set; }
+        public double? WaterBicarbonate { get; set; }
+        public double? WaterCalcium { get; set; }
+        public double? WaterMagnesium { get; set; }
+        public double? WaterSar { get; set; }
     }
 }

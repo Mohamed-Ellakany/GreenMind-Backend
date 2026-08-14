@@ -1,4 +1,4 @@
-﻿using Greenmind.Domain.Consts.Enums;
+using Greenmind.Domain.Consts.Enums;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -53,6 +53,93 @@ namespace Greenmind.Domain.Entities
 
         [MaxLength(1000)]
         public string? Notes { get; set; }
+
+        // Farm Environment & Characteristics
+        [MaxLength(50)]
+        public string? FarmType { get; set; }
+
+        [MaxLength(50)]
+        public string? SoilType { get; set; }
+
+        // Soil Analysis (Manual Input)
+        [Column(TypeName = "float")]
+        public double? SoilPh { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? SoilEc { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? SoilNitrogen { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? SoilPhosphorus { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? SoilPotassium { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? SoilOrganicMatter { get; set; }
+
+        // Irrigation Water Analysis (Manual Input)
+        [Column(TypeName = "float")]
+        public double? WaterPh { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterEc { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterSalinity { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterSodium { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterChloride { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterBicarbonate { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterCalcium { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterMagnesium { get; set; }
+
+        [Column(TypeName = "float")]
+        public double? WaterSar { get; set; }
+
+        // Irrigation System
+        [MaxLength(50)]
+        public string? IrrigationSystem { get; set; }
+
+        [MaxLength(50)]
+        public string? Fertigation { get; set; }
+
+        public bool IsSoilAnalysisCompleted() =>
+            SoilPh.HasValue && SoilPh.Value >= 0 && SoilPh.Value <= 14 &&
+            SoilEc.HasValue && SoilEc.Value >= 0 &&
+            SoilNitrogen.HasValue && SoilNitrogen.Value >= 0 &&
+            SoilPhosphorus.HasValue && SoilPhosphorus.Value >= 0 &&
+            SoilPotassium.HasValue && SoilPotassium.Value >= 0 &&
+            SoilOrganicMatter.HasValue && SoilOrganicMatter.Value >= 0;
+
+        public bool IsWaterAnalysisCompleted() =>
+            WaterPh.HasValue && WaterPh.Value >= 0 && WaterPh.Value <= 14 &&
+            WaterEc.HasValue && WaterEc.Value >= 0 &&
+            WaterSalinity.HasValue && WaterSalinity.Value >= 0 &&
+            WaterSodium.HasValue && WaterSodium.Value >= 0 &&
+            WaterChloride.HasValue && WaterChloride.Value >= 0 &&
+            WaterBicarbonate.HasValue && WaterBicarbonate.Value >= 0 &&
+            WaterCalcium.HasValue && WaterCalcium.Value >= 0 &&
+            WaterMagnesium.HasValue && WaterMagnesium.Value >= 0 &&
+            WaterSar.HasValue && WaterSar.Value >= 0;
+
+        public bool IsFarmDataReady() =>
+            !string.IsNullOrWhiteSpace(FarmType) &&
+            !string.IsNullOrWhiteSpace(SoilType) &&
+            !string.IsNullOrWhiteSpace(IrrigationSystem) &&
+            IsSoilAnalysisCompleted() &&
+            IsWaterAnalysisCompleted();
 
         [Required]
         public PlanningGenerationStatus PlanningStatus { get; set; } = PlanningGenerationStatus.Pending;
