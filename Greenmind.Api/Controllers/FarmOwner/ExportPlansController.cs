@@ -119,6 +119,56 @@ public sealed class ExportPlansController(IExportPlanService exportPlanService) 
         };
     }
 
+    [HttpPut("{exportPlanId:int}/farm-data")]
+    public async Task<ActionResult<ExportPlanDetailsDto>> UpdateFarmData(
+        int exportPlanId,
+        [FromBody] ExportPlanFarmDataUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await exportPlanService.UpdateFarmDataAsync(
+            exportPlanId,
+            GetOwnerUserId(),
+            request,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ExportPlanResultStatus.Succeeded => Ok(result.Value),
+            ExportPlanResultStatus.InvalidReference => BadRequest(
+                ApiResponseFactory.ValidationFailure<ExportPlanDetailsDto>(
+                    new Dictionary<string, string[]>
+                    {
+                        [result.ErrorField!] = [result.ErrorMessage!]
+                    },
+                    HttpContext.TraceIdentifier)),
+            _ => NotFound()
+        };
+    }
+
+    [HttpPost("{exportPlanId:int}/start-tasks")]
+    public async Task<ActionResult<ExportPlanDetailsDto>> StartTasks(
+        int exportPlanId,
+        CancellationToken cancellationToken)
+    {
+        var result = await exportPlanService.StartTasksAsync(
+            exportPlanId,
+            GetOwnerUserId(),
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ExportPlanResultStatus.Succeeded => Ok(result.Value),
+            ExportPlanResultStatus.InvalidReference => BadRequest(
+                ApiResponseFactory.ValidationFailure<ExportPlanDetailsDto>(
+                    new Dictionary<string, string[]>
+                    {
+                        [result.ErrorField!] = [result.ErrorMessage!]
+                    },
+                    HttpContext.TraceIdentifier)),
+            _ => NotFound()
+        };
+    }
+
     private string GetOwnerUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new InvalidOperationException("An authenticated user id is required.");

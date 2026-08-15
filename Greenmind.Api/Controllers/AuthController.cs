@@ -60,6 +60,7 @@ public class AuthController : ControllerBase
 
         ApplicationUser? createdUser = null;
         Farm? createdFarm = null;
+        string? activationToken = null;
 
         var executionResult = await strategy.ExecuteAsync<IActionResult?>(async () =>
         {
@@ -70,7 +71,7 @@ public class AuthController : ControllerBase
                 UserName = request.Email,
                 Email = request.Email,
                 FullName = request.FullName,
-                IsActive = false // new users are inactive pending admin approval
+                IsActive = false // Inactive pending email activation
             };
 
             var createResult = await _userManager.CreateAsync(user, request.Password);
@@ -98,11 +99,13 @@ public class AuthController : ControllerBase
                 return StatusCode(500, new { Message = "Failed to assign role." });
             }
 
-            // Create farm linked to owner
+            // Create farm linked to owner - auto-approved (no admin approval required)
             var farm = new Farm
             {
                 Name = request.FarmName,
-                OwnerUserId = user.Id
+                OwnerUserId = user.Id,
+                IsApproved = true,
+                ApprovedAtUtc = DateTime.UtcNow
             };
 
             await _unitOfWork.Farms.AddAsync(farm);
@@ -132,7 +135,8 @@ public class AuthController : ControllerBase
 
         if (createdUser is not null && createdFarm is not null)
         {
-            await TrySendRegistrationEmailsAsync(createdUser, createdFarm);
+            activationToken = await _userManager.GenerateEmailConfirmationTokenAsync(createdUser);
+            await TrySendActivationEmailAsync(createdUser, activationToken);
 
             var response = new RegisterResponse
             {
@@ -144,6 +148,59 @@ public class AuthController : ControllerBase
         }
 
         return StatusCode(500, new { Message = "Registration failed unexpectedly." });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("activate-account")]
+    public async Task<IActionResult> ActivateAccount([FromBody] ActivateAccountRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is null)
+            return BadRequest(new { Message = "Invalid activation request." });
+
+        if (user.IsActive && user.EmailConfirmed)
+        {
+            return Ok(new { Message = "Account is already activated. You can proceed to log in." });
+        }
+
+        var result = await _userManager.ConfirmEmailAsync(user, request.Token);
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { Message = "Activation token is invalid or has expired.", Errors = result.Errors.Select(e => e.Description) });
+        }
+
+        user.IsActive = true;
+        await _userManager.UpdateAsync(user);
+
+        var farm = await _db.Farms.SingleOrDefaultAsync(f => f.OwnerUserId == user.Id, cancellationToken);
+        if (farm is not null && !farm.IsApproved)
+        {
+            farm.IsApproved = true;
+            farm.ApprovedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new { Message = "Account activated successfully. You can now log in." });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("resend-activation")]
+    public async Task<IActionResult> ResendActivation([FromBody] ResendActivationRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is not null && (!user.IsActive || !user.EmailConfirmed) && _emailService.IsConfigured)
+        {
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            await _emailService.SendAccountActivationAsync(user.Email!, user.FullName, token, cancellationToken);
+        }
+
+        return Accepted(new { Message = "If an inactive account with this email exists, an activation link has been sent." });
     }
 
     [HttpPost("login")]
@@ -160,24 +217,11 @@ public class AuthController : ControllerBase
         if (!valid)
             return Unauthorized();
 
-        var farmApproval = await _db.Farms
-            .AsNoTracking()
-            .Where(farm => farm.OwnerUserId == user.Id)
-            .Select(farm => new { farm.IsApproved })
-            .SingleOrDefaultAsync();
-
-        if (farmApproval is { IsApproved: false })
-        {
-            return AccountStateUnauthorized(
-                ApiErrorCodes.AccountPendingApproval,
-                "Account is waiting for admin approval.");
-        }
-
-        if (!user.IsActive)
+        if (!user.IsActive || !user.EmailConfirmed)
         {
             return AccountStateUnauthorized(
                 ApiErrorCodes.AccountInactive,
-                "User account is not active.");
+                "Account is not activated yet. Please activate your account using the confirmation link sent to your email.");
         }
 
         var roles = await _userManager.GetRolesAsync(user);
@@ -336,13 +380,13 @@ public class AuthController : ControllerBase
                 message,
                 HttpContext.TraceIdentifier));
 
-    private async Task TrySendRegistrationEmailsAsync(ApplicationUser user, Farm farm)
+    private async Task TrySendActivationEmailAsync(ApplicationUser user, string token)
     {
         if (!_emailService.IsConfigured)
         {
             _logger.LogInformation(
-                "Skipping registration emails for farm {FarmId} because SMTP is not configured.",
-                farm.Id);
+                "Skipping activation email for user {UserId} because SMTP is not configured.",
+                user.Id);
             return;
         }
 
@@ -350,32 +394,19 @@ public class AuthController : ControllerBase
         {
             if (!string.IsNullOrWhiteSpace(user.Email))
             {
-                await _emailService.SendRegistrationReceivedAsync(
+                await _emailService.SendAccountActivationAsync(
                     user.Email,
                     user.FullName,
-                    farm.Name,
+                    token,
                     HttpContext.RequestAborted);
             }
-
-            var adminEmails = (await _userManager.GetUsersInRoleAsync(RoleNames.Admin))
-                .Where(admin => admin.IsActive && !string.IsNullOrWhiteSpace(admin.Email))
-                .Select(admin => admin.Email!)
-                .ToArray();
-
-            await _emailService.SendNewRegistrationAlertAsync(
-                adminEmails,
-                user.FullName,
-                user.Email ?? "",
-                farm.Name,
-                farm.Id,
-                HttpContext.RequestAborted);
         }
         catch (Exception exception) when (exception is SmtpException or InvalidOperationException)
         {
             _logger.LogWarning(
                 exception,
-                "Registration emails could not be sent for farm {FarmId}.",
-                farm.Id);
+                "Activation email could not be sent for user {UserId}.",
+                user.Id);
         }
     }
 }
@@ -401,3 +432,5 @@ public sealed record ChangeAccountPasswordRequest(
 
 public sealed record ForgotPasswordRequest([Required, EmailAddress] string Email);
 public sealed record ResetPasswordRequest([Required, EmailAddress] string Email, [Required] string Token, [Required, MinLength(8)] string NewPassword);
+public sealed record ActivateAccountRequest([Required, EmailAddress] string Email, [Required] string Token);
+public sealed record ResendActivationRequest([Required, EmailAddress] string Email);

@@ -144,6 +144,63 @@ namespace Greenmind.Infrastructure.Migrations
                     b.ToTable("AdminInvitations");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.AiLimitRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ContactPhone")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("NewLimitUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ResolvedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("AiLimitRequests");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.AiUsageRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -243,6 +300,11 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("AiUsageLimitUsd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,8)")
+                        .HasDefaultValue(0.10m);
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -1181,6 +1243,14 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Property<int>("FarmId")
                         .HasColumnType("int");
 
+                    b.Property<string>("FarmType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Fertigation")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<int>("GeneratedTaskCount")
                         .HasColumnType("int");
 
@@ -1188,6 +1258,10 @@ namespace Greenmind.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("IrrigationSystem")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<double>("Latitude")
                         .HasColumnType("float");
@@ -1225,14 +1299,65 @@ namespace Greenmind.Infrastructure.Migrations
 
                     b.Property<string>("PlanningStatus")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<DateOnly>("PlantingDate")
                         .HasColumnType("date");
 
+                    b.Property<double?>("SoilEc")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SoilNitrogen")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SoilOrganicMatter")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SoilPh")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SoilPhosphorus")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SoilPotassium")
+                        .HasColumnType("float");
+
+                    b.Property<string>("SoilType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<double?>("WaterBicarbonate")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterCalcium")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterChloride")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterEc")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterMagnesium")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterPh")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterSalinity")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterSar")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("WaterSodium")
+                        .HasColumnType("float");
 
                     b.HasKey("Id");
 
@@ -1241,6 +1366,8 @@ namespace Greenmind.Infrastructure.Migrations
                     b.HasIndex("DestinationId");
 
                     b.HasIndex("FarmId");
+
+                    b.HasIndex("PlanningStatus", "NextPlanningAttemptAtUtc", "PlanningRequestedAtUtc");
 
                     b.ToTable("ExportPlans");
                 });
@@ -1578,6 +1705,8 @@ namespace Greenmind.Infrastructure.Migrations
                         .HasColumnType("nvarchar(32)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAt");
 
                     b.HasIndex("ExportPlanId", "Status", "CreatedAt");
 
@@ -2107,6 +2236,24 @@ namespace Greenmind.Infrastructure.Migrations
                     b.Navigation("CreatedByUser");
                 });
 
+            modelBuilder.Entity("Greenmind.Domain.Entities.AiLimitRequest", b =>
+                {
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Greenmind.Domain.Entities.ApplicationUser", "User")
+                        .WithMany("AiLimitRequests")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ResolvedByUser");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Greenmind.Domain.Entities.AiUsageRecord", b =>
                 {
                     b.HasOne("Greenmind.Domain.Entities.ExportPlan", "ExportPlan")
@@ -2574,6 +2721,8 @@ namespace Greenmind.Infrastructure.Migrations
 
             modelBuilder.Entity("Greenmind.Domain.Entities.ApplicationUser", b =>
                 {
+                    b.Navigation("AiLimitRequests");
+
                     b.Navigation("AiUsageRecords");
 
                     b.Navigation("CreatedAdminInvitations");

@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.DataProtection;
 using Greenmind.Application.Contracts.Api;
+using Greenmind.Api.Controllers;
 
 namespace Greenmind.Api.Tests;
 
@@ -56,7 +57,14 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
             if (!await roleManager.RoleExistsAsync("FarmOwner"))
                 await roleManager.CreateAsync(new IdentityRole("FarmOwner"));
 
-            var user = new ApplicationUser { UserName = "active@test.local", Email = "active@test.local", FullName = "Active User", IsActive = true };
+            var user = new ApplicationUser
+            {
+                UserName = "active@test.local",
+                Email = "active@test.local",
+                FullName = "Active User",
+                IsActive = true,
+                EmailConfirmed = true
+            };
             var res = await userManager.CreateAsync(user, "P@ssword123");
             await userManager.AddToRoleAsync(user, "FarmOwner");
 
@@ -88,7 +96,7 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task PendingFarmOwner_WithValidPassword_GetsPendingApprovalCode()
+    public async Task InactiveUser_WithValidPassword_GetsInactiveCode()
     {
         var client = _factory.CreateClient();
 
@@ -98,32 +106,14 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
             var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
             var db = services.GetRequiredService<GreenmindDbContext>();
 
-            var user = new ApplicationUser { UserName = "pending@test.local", Email = "pending@test.local", FullName = "Pending User", IsActive = false };
-            await userManager.CreateAsync(user, "P@ssword123");
-            db.Farms.Add(new Farm { Name = "Pending Farm", OwnerUserId = user.Id, IsApproved = false });
-            await db.SaveChangesAsync();
-        }
-
-        var login = new LoginRequest { Email = "pending@test.local", Password = "P@ssword123" };
-        var response = await client.PostAsJsonAsync("/api/auth/login", login);
-        var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
-
-        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal(ApiErrorCodes.AccountPendingApproval, body?.Error?.Code);
-    }
-
-    [Fact]
-    public async Task InactiveApprovedUser_WithValidPassword_GetsInactiveCode()
-    {
-        var client = _factory.CreateClient();
-
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var services = scope.ServiceProvider;
-            var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
-            var db = services.GetRequiredService<GreenmindDbContext>();
-
-            var user = new ApplicationUser { UserName = "inactive@test.local", Email = "inactive@test.local", FullName = "Inactive User", IsActive = false };
+            var user = new ApplicationUser
+            {
+                UserName = "inactive@test.local",
+                Email = "inactive@test.local",
+                FullName = "Inactive User",
+                IsActive = false,
+                EmailConfirmed = false
+            };
             await userManager.CreateAsync(user, "P@ssword123");
             db.Farms.Add(new Farm { Name = "Inactive Farm", OwnerUserId = user.Id, IsApproved = true });
             await db.SaveChangesAsync();
@@ -139,7 +129,58 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task PendingFarmOwner_WithInvalidPassword_DoesNotRevealApprovalState()
+    public async Task ActivateAccount_WithValidToken_ActivatesUserAndAllowsLogin()
+    {
+        var client = _factory.CreateClient();
+        string email = "activate-me@test.local";
+        string password = "P@ssword123";
+        string token;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+            var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+            var db = services.GetRequiredService<GreenmindDbContext>();
+
+            if (!await roleManager.RoleExistsAsync("FarmOwner"))
+                await roleManager.CreateAsync(new IdentityRole("FarmOwner"));
+
+            var user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                FullName = "To Activate",
+                IsActive = false,
+                EmailConfirmed = false
+            };
+            await userManager.CreateAsync(user, password);
+            await userManager.AddToRoleAsync(user, "FarmOwner");
+
+            db.Farms.Add(new Farm { Name = "Activate Farm", OwnerUserId = user.Id, IsApproved = true });
+            await db.SaveChangesAsync();
+
+            token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+        }
+
+        // Activate
+        var activateResponse = await client.PostAsJsonAsync(
+            "/api/auth/activate-account",
+            new ActivateAccountRequest(email, token));
+        activateResponse.EnsureSuccessStatusCode();
+
+        // Now login should succeed
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest { Email = email, Password = password });
+        loginResponse.EnsureSuccessStatusCode();
+
+        var body = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>();
+        Assert.NotNull(body?.Data?.Token);
+    }
+
+    [Fact]
+    public async Task InactiveUser_WithInvalidPassword_DoesNotRevealActivationState()
     {
         var client = _factory.CreateClient();
 
@@ -149,15 +190,22 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
             var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
             var db = services.GetRequiredService<GreenmindDbContext>();
 
-            var user = new ApplicationUser { UserName = "pending-invalid@test.local", Email = "pending-invalid@test.local", FullName = "Pending Invalid User", IsActive = false };
+            var user = new ApplicationUser
+            {
+                UserName = "unconfirmed-invalid@test.local",
+                Email = "unconfirmed-invalid@test.local",
+                FullName = "Unconfirmed Invalid User",
+                IsActive = false,
+                EmailConfirmed = false
+            };
             await userManager.CreateAsync(user, "P@ssword123");
-            db.Farms.Add(new Farm { Name = "Pending Invalid Farm", OwnerUserId = user.Id, IsApproved = false });
+            db.Farms.Add(new Farm { Name = "Unconfirmed Farm", OwnerUserId = user.Id, IsApproved = true });
             await db.SaveChangesAsync();
         }
 
         var response = await client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequest { Email = "pending-invalid@test.local", Password = "wrong-password" });
+            new LoginRequest { Email = "unconfirmed-invalid@test.local", Password = "wrong-password" });
         var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);

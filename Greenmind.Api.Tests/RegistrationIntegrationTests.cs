@@ -71,6 +71,7 @@ public class RegistrationIntegrationTests : IClassFixture<WebApplicationFactory<
         var farm = await db.Farms.SingleOrDefaultAsync(f => f.OwnerUserId == user.Id);
         Assert.NotNull(farm);
         Assert.Equal(request.FarmName, farm!.Name);
+        Assert.True(farm.IsApproved);
 
         var categories = await db.ExpenseCategories
             .Where(category => category.FarmId == farm.Id)

@@ -30,16 +30,14 @@ public sealed class FarmAccountAccessMiddleware(RequestDelegate next, ILoggerFac
             .Where(user => user.Id == userId)
             .Select(user => new
             {
-                user.IsActive,
-                HasFarm = user.Farm != null,
-                IsFarmApproved = user.Farm == null || user.Farm.IsApproved
+                user.IsActive
             })
             .SingleOrDefaultAsync(context.RequestAborted);
 
-        if (account is null || !account.IsActive || (account.HasFarm && !account.IsFarmApproved))
+        if (account is null || !account.IsActive)
         {
             _logger.LogWarning(
-                "Blocked inactive or unapproved account {UserId} from {Method} {Path}. TraceId: {TraceId}",
+                "Blocked inactive account {UserId} from {Method} {Path}. TraceId: {TraceId}",
                 userId,
                 context.Request.Method,
                 context.Request.Path.Value,
@@ -51,7 +49,7 @@ public sealed class FarmAccountAccessMiddleware(RequestDelegate next, ILoggerFac
                 ApiResponseFactory.FromStatusCode<object?>(
                     StatusCodes.Status403Forbidden,
                     context.TraceIdentifier,
-                    "The account is inactive or awaiting farm approval."),
+                    "The account is inactive or pending email activation."),
                 context.RequestAborted);
             return;
         }

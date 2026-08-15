@@ -628,11 +628,38 @@ public sealed class ChatService(
                 Destination = item.Destination.Name,
                 item.Governorate,
                 item.City,
+                item.Latitude,
+                item.Longitude,
                 item.AreaInFeddan,
                 item.PlantingDate,
                 item.ExpectedHarvestDate,
                 item.ExpectedExportDate,
-                Status = item.Status.ToString()
+                Status = item.Status.ToString(),
+                item.FarmType,
+                item.SoilType,
+                item.IrrigationSystem,
+                item.Fertigation,
+                SoilAnalysis = new
+                {
+                    Ph = item.SoilPh,
+                    Ec = item.SoilEc,
+                    Nitrogen = item.SoilNitrogen,
+                    Phosphorus = item.SoilPhosphorus,
+                    Potassium = item.SoilPotassium,
+                    OrganicMatter = item.SoilOrganicMatter
+                },
+                WaterAnalysis = new
+                {
+                    Ph = item.WaterPh,
+                    Ec = item.WaterEc,
+                    Salinity = item.WaterSalinity,
+                    Sodium = item.WaterSodium,
+                    Chloride = item.WaterChloride,
+                    Bicarbonate = item.WaterBicarbonate,
+                    Calcium = item.WaterCalcium,
+                    Magnesium = item.WaterMagnesium,
+                    Sar = item.WaterSar
+                }
             })
             .SingleAsync(cancellationToken);
 
@@ -725,6 +752,10 @@ public sealed class ChatService(
                 Crop = plan.Crop.Name,
                 Destination = plan.Destination.Name,
                 Status = plan.Status.ToString(),
+                plan.FarmType,
+                plan.SoilType,
+                plan.IrrigationSystem,
+                plan.Fertigation,
                 plan.ExpectedHarvestDate,
                 plan.ExpectedExportDate,
                 TaskCount = plan.FarmTasks.Count,
@@ -743,6 +774,10 @@ public sealed class ChatService(
             plan.Crop,
             plan.Destination,
             plan.Status,
+            plan.FarmType,
+            plan.SoilType,
+            plan.IrrigationSystem,
+            plan.Fertigation,
             plan.ExpectedHarvestDate,
             plan.ExpectedExportDate,
             plan.TaskCount,

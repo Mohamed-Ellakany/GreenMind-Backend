@@ -85,12 +85,35 @@ public sealed class ExportPlanService(
             PlantingDate = request.PlantingDate!.Value,
             ExpectedHarvestDate = request.ExpectedHarvestDate!.Value,
             ExpectedExportDate = request.ExpectedExportDate!.Value,
-            Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.Planning,
             Notes = NormalizeNotes(request.Notes),
-            PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Pending,
-            PlanningRequestedAtUtc = DateTime.UtcNow,
-            NextPlanningAttemptAtUtc = DateTime.UtcNow
+            FarmType = NormalizeString(request.FarmType),
+            SoilType = NormalizeString(request.SoilType),
+            SoilPh = request.SoilPh,
+            SoilEc = request.SoilEc,
+            SoilNitrogen = request.SoilNitrogen,
+            SoilPhosphorus = request.SoilPhosphorus,
+            SoilPotassium = request.SoilPotassium,
+            SoilOrganicMatter = request.SoilOrganicMatter,
+            WaterPh = request.WaterPh,
+            WaterEc = request.WaterEc,
+            WaterSalinity = request.WaterSalinity,
+            WaterSodium = request.WaterSodium,
+            WaterChloride = request.WaterChloride,
+            WaterBicarbonate = request.WaterBicarbonate,
+            WaterCalcium = request.WaterCalcium,
+            WaterMagnesium = request.WaterMagnesium,
+            WaterSar = request.WaterSar,
+            IrrigationSystem = NormalizeString(request.IrrigationSystem),
+            Fertigation = NormalizeString(request.Fertigation)
         };
+
+        var isReady = exportPlan.IsFarmDataReady();
+        exportPlan.Status = isReady
+            ? Greenmind.Domain.Consts.Enums.ExportPlanStatus.Planning
+            : Greenmind.Domain.Consts.Enums.ExportPlanStatus.AwaitingFarmData;
+        exportPlan.PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Pending;
+        exportPlan.PlanningRequestedAtUtc = isReady ? DateTime.UtcNow : null;
+        exportPlan.NextPlanningAttemptAtUtc = isReady ? DateTime.UtcNow : null;
 
         dbContext.ExportPlans.Add(exportPlan);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -196,24 +219,33 @@ public sealed class ExportPlanService(
 
     public async Task<IReadOnlyList<ExportPlanListItemDto>> GetAllAsync(
         string ownerUserId,
-        CancellationToken cancellationToken = default) =>
-        await dbContext.ExportPlans
+        CancellationToken cancellationToken = default)
+    {
+        var plans = await dbContext.ExportPlans
             .AsNoTracking()
+            .Include(plan => plan.Crop)
+            .Include(plan => plan.Destination)
             .Where(plan => plan.Farm.OwnerUserId == ownerUserId)
             .OrderBy(plan => plan.ExpectedExportDate)
             .ThenBy(plan => plan.Id)
-            .Select(plan => new ExportPlanListItemDto(
-                plan.Id,
-                plan.Name,
-                plan.Crop.Name,
-                plan.Destination.Name,
-                plan.PlantingDate,
-                plan.ExpectedHarvestDate,
-                plan.ExpectedExportDate,
-                plan.Status.ToString(),
-                plan.PlanningStatus.ToString(),
-                plan.GeneratedTaskCount))
             .ToListAsync(cancellationToken);
+
+        return plans.Select(plan => new ExportPlanListItemDto(
+            plan.Id,
+            plan.Name,
+            plan.Crop.Name,
+            plan.Destination.Name,
+            plan.PlantingDate,
+            plan.ExpectedHarvestDate,
+            plan.ExpectedExportDate,
+            plan.Status.ToString(),
+            plan.PlanningStatus.ToString(),
+            plan.GeneratedTaskCount,
+            plan.IsFarmDataReady(),
+            plan.FarmType,
+            plan.SoilType,
+            plan.IrrigationSystem)).ToList();
+    }
 
     public async Task<ExportPlanResult<ExportPlanDetailsDto>> GetByIdAsync(
         int exportPlanId,
@@ -222,33 +254,98 @@ public sealed class ExportPlanService(
     {
         var plan = await dbContext.ExportPlans
             .AsNoTracking()
+            .Include(item => item.Crop)
+            .Include(item => item.Destination)
             .Where(item => item.Id == exportPlanId && item.Farm.OwnerUserId == ownerUserId)
-            .Select(item => new ExportPlanDetailsDto(
-                item.Id,
-                item.Name,
-                item.CropId,
-                item.Crop.Name,
-                item.CropId == CropCatalog.Strawberry.Id,
-                item.DestinationId,
-                item.Destination.Name,
-                item.Governorate,
-                item.City,
-                item.Latitude,
-                item.Longitude,
-                item.AreaInFeddan,
-                item.PlantingDate,
-                item.ExpectedHarvestDate,
-                item.ExpectedExportDate,
-                item.Status.ToString(),
-                item.Notes,
-                item.PlanningStatus.ToString(),
-                item.GeneratedTaskCount,
-                item.PlanningFailureMessage))
             .SingleOrDefaultAsync(cancellationToken);
 
         return plan is null
             ? ExportPlanResult<ExportPlanDetailsDto>.NotFound()
-            : ExportPlanResult<ExportPlanDetailsDto>.Success(plan);
+            : ExportPlanResult<ExportPlanDetailsDto>.Success(BuildDetailsDto(plan));
+    }
+
+    public async Task<ExportPlanResult<ExportPlanDetailsDto>> UpdateFarmDataAsync(
+        int exportPlanId,
+        string ownerUserId,
+        ExportPlanFarmDataUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await dbContext.ExportPlans
+            .Include(item => item.Crop)
+            .Include(item => item.Destination)
+            .SingleOrDefaultAsync(item =>
+                item.Id == exportPlanId && item.Farm.OwnerUserId == ownerUserId,
+                cancellationToken);
+
+        if (plan is null)
+            return ExportPlanResult<ExportPlanDetailsDto>.NotFound();
+
+        plan.FarmType = NormalizeString(request.FarmType);
+        plan.SoilType = NormalizeString(request.SoilType);
+        plan.SoilPh = request.SoilPh;
+        plan.SoilEc = request.SoilEc;
+        plan.SoilNitrogen = request.SoilNitrogen;
+        plan.SoilPhosphorus = request.SoilPhosphorus;
+        plan.SoilPotassium = request.SoilPotassium;
+        plan.SoilOrganicMatter = request.SoilOrganicMatter;
+        plan.WaterPh = request.WaterPh;
+        plan.WaterEc = request.WaterEc;
+        plan.WaterSalinity = request.WaterSalinity;
+        plan.WaterSodium = request.WaterSodium;
+        plan.WaterChloride = request.WaterChloride;
+        plan.WaterBicarbonate = request.WaterBicarbonate;
+        plan.WaterCalcium = request.WaterCalcium;
+        plan.WaterMagnesium = request.WaterMagnesium;
+        plan.WaterSar = request.WaterSar;
+        plan.IrrigationSystem = NormalizeString(request.IrrigationSystem);
+        plan.Fertigation = NormalizeString(request.Fertigation);
+
+        if (plan.IsFarmDataReady() && plan.Status == Greenmind.Domain.Consts.Enums.ExportPlanStatus.AwaitingFarmData)
+        {
+            plan.Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.Planning;
+            plan.PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Pending;
+            plan.PlanningRequestedAtUtc = DateTime.UtcNow;
+            plan.NextPlanningAttemptAtUtc = DateTime.UtcNow;
+            plan.PlanningAttemptCount = 0;
+            plan.PlanningFailureMessage = null;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ExportPlanResult<ExportPlanDetailsDto>.Success(BuildDetailsDto(plan));
+    }
+
+    public async Task<ExportPlanResult<ExportPlanDetailsDto>> StartTasksAsync(
+        int exportPlanId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await dbContext.ExportPlans
+            .Include(item => item.Crop)
+            .Include(item => item.Destination)
+            .SingleOrDefaultAsync(item =>
+                item.Id == exportPlanId && item.Farm.OwnerUserId == ownerUserId,
+                cancellationToken);
+
+        if (plan is null)
+            return ExportPlanResult<ExportPlanDetailsDto>.NotFound();
+
+        var isLegacy = plan.GeneratedTaskCount > 0 || plan.PlanningStatus == Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Succeeded;
+        if (!plan.IsFarmDataReady() && !isLegacy)
+        {
+            return ExportPlanResult<ExportPlanDetailsDto>.InvalidReference(
+                nameof(plan.Status),
+                "استكمل تحاليل التربة والمياه وبيانات المزرعة قبل بدء المهام الزراعية.");
+        }
+
+        plan.Status = Greenmind.Domain.Consts.Enums.ExportPlanStatus.Planning;
+        plan.PlanningStatus = Greenmind.Domain.Consts.Enums.PlanningGenerationStatus.Pending;
+        plan.PlanningRequestedAtUtc = DateTime.UtcNow;
+        plan.NextPlanningAttemptAtUtc = DateTime.UtcNow;
+        plan.PlanningAttemptCount = 0;
+        plan.PlanningFailureMessage = null;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ExportPlanResult<ExportPlanDetailsDto>.Success(BuildDetailsDto(plan));
     }
 
     public async Task<ExportPlanResult<PlanningStatusDto>> GetPlanningStatusAsync(
@@ -309,32 +406,92 @@ public sealed class ExportPlanService(
         return ExportPlanResult<PlanningStatusDto>.Success(MapPlanningStatus(plan));
     }
 
-    private async Task<ExportPlanDetailsDto> MapDetailsAsync(int exportPlanId, CancellationToken cancellationToken) =>
-        (await dbContext.ExportPlans
+    private async Task<ExportPlanDetailsDto> MapDetailsAsync(int exportPlanId, CancellationToken cancellationToken)
+    {
+        var plan = await dbContext.ExportPlans
             .AsNoTracking()
-            .Where(plan => plan.Id == exportPlanId)
-            .Select(plan => new ExportPlanDetailsDto(
-                plan.Id,
-                plan.Name,
-                plan.CropId,
-                plan.Crop.Name,
-                plan.CropId == CropCatalog.Strawberry.Id,
-                plan.DestinationId,
-                plan.Destination.Name,
-                plan.Governorate,
-                plan.City,
-                plan.Latitude,
-                plan.Longitude,
-                plan.AreaInFeddan,
-                plan.PlantingDate,
-                plan.ExpectedHarvestDate,
-                plan.ExpectedExportDate,
-                plan.Status.ToString(),
-                plan.Notes,
-                plan.PlanningStatus.ToString(),
-                plan.GeneratedTaskCount,
-                plan.PlanningFailureMessage))
-            .SingleAsync(cancellationToken));
+            .Include(item => item.Crop)
+            .Include(item => item.Destination)
+            .SingleAsync(plan => plan.Id == exportPlanId, cancellationToken);
+        return BuildDetailsDto(plan);
+    }
+
+    private static ExportPlanDetailsDto BuildDetailsDto(ExportPlan plan)
+    {
+        var soilCompleted = plan.IsSoilAnalysisCompleted();
+        var waterCompleted = plan.IsWaterAnalysisCompleted();
+        var farmDataReady = plan.IsFarmDataReady();
+
+        var completedCount = (string.IsNullOrWhiteSpace(plan.FarmType) ? 0 : 1)
+            + (string.IsNullOrWhiteSpace(plan.SoilType) ? 0 : 1)
+            + (soilCompleted ? 1 : 0)
+            + (waterCompleted ? 1 : 0)
+            + (string.IsNullOrWhiteSpace(plan.IrrigationSystem) ? 0 : 1);
+
+        return new ExportPlanDetailsDto(
+            plan.Id,
+            plan.Name,
+            plan.CropId,
+            plan.Crop?.Name ?? string.Empty,
+            plan.CropId == CropCatalog.Strawberry.Id,
+            plan.DestinationId,
+            plan.Destination?.Name ?? string.Empty,
+            plan.Governorate,
+            plan.City,
+            plan.Latitude,
+            plan.Longitude,
+            plan.AreaInFeddan,
+            plan.PlantingDate,
+            plan.ExpectedHarvestDate,
+            plan.ExpectedExportDate,
+            plan.Status.ToString(),
+            plan.Notes,
+            plan.PlanningStatus.ToString(),
+            plan.GeneratedTaskCount,
+            plan.PlanningFailureMessage,
+            plan.FarmType,
+            plan.SoilType,
+            plan.IrrigationSystem,
+            plan.Fertigation,
+            new SoilAnalysisSummaryDto(
+                plan.SoilPh,
+                plan.SoilEc,
+                plan.SoilNitrogen,
+                plan.SoilPhosphorus,
+                plan.SoilPotassium,
+                plan.SoilOrganicMatter,
+                soilCompleted),
+            new WaterAnalysisSummaryDto(
+                plan.WaterPh,
+                plan.WaterEc,
+                plan.WaterSalinity,
+                plan.WaterSodium,
+                plan.WaterChloride,
+                plan.WaterBicarbonate,
+                plan.WaterCalcium,
+                plan.WaterMagnesium,
+                plan.WaterSar,
+                waterCompleted),
+            farmDataReady,
+            completedCount,
+            soilCompleted,
+            waterCompleted,
+            plan.SoilPh,
+            plan.SoilEc,
+            plan.SoilNitrogen,
+            plan.SoilPhosphorus,
+            plan.SoilPotassium,
+            plan.SoilOrganicMatter,
+            plan.WaterPh,
+            plan.WaterEc,
+            plan.WaterSalinity,
+            plan.WaterSodium,
+            plan.WaterChloride,
+            plan.WaterBicarbonate,
+            plan.WaterCalcium,
+            plan.WaterMagnesium,
+            plan.WaterSar);
+    }
 
     private static PlanningStatusDto MapPlanningStatus(ExportPlan plan) => new(
         plan.Id,
@@ -348,6 +505,9 @@ public sealed class ExportPlanService(
 
     private static string? NormalizeNotes(string? notes) =>
         string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+
+    private static string? NormalizeString(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private string CreateAnalysisToken(
         string ownerUserId,

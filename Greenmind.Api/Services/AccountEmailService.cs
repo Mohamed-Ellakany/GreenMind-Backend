@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
 using System.Text;
-using System.Text.Encodings.Web;
 
 namespace Greenmind.Api.Services;
 
@@ -10,15 +9,22 @@ public sealed class AccountEmailService(
     IConfiguration configuration,
     ILogger<AccountEmailService> logger) : IAccountEmailService
 {
+    private const string DefaultGmailHost = "smtp.gmail.com";
+    private const int DefaultPort = 587;
+    private const string DefaultDisplayName = "GreenMind | نظام العقل الأخضر";
+
     public bool IsConfigured
     {
         get
         {
             var settings = configuration.GetSection("Smtp");
-            return !string.IsNullOrWhiteSpace(settings["Host"])
-                && !string.IsNullOrWhiteSpace(settings["UserName"])
-                && !string.IsNullOrWhiteSpace(settings["Password"])
-                && !string.IsNullOrWhiteSpace(settings["From"]);
+            var userName = settings["UserName"]?.Trim();
+            var password = (settings["Password"] ?? settings["ApiKey"])?.Trim();
+            var from = (settings["From"] ?? userName)?.Trim();
+
+            return !string.IsNullOrWhiteSpace(userName)
+                && !string.IsNullOrWhiteSpace(password)
+                && !string.IsNullOrWhiteSpace(from);
         }
     }
 
@@ -28,19 +34,38 @@ public sealed class AccountEmailService(
         string token,
         CancellationToken cancellationToken = default)
     {
-        var url = FrontendUrl("/auth/accept-invitation?token=" + Uri.EscapeDataString(token));
-        var body = BuildEmail(
-            "You have been invited to GreenMind",
-            $"Hello {Encode(fullName)},",
-            "A super admin invited you to help manage GreenMind. Create your password to activate your admin account.",
-            "Create admin account",
-            url,
-            [
-                ("Invitation expires", "7 days"),
-                ("Account role", "Admin")
-            ]);
+        var actionUrl = FrontendUrl("/auth/accept-invitation?token=" + Uri.EscapeDataString(token));
+        var htmlBody = EmailTemplateBuilder.BuildAdminInvitationEmail(
+            fullName: fullName,
+            email: email,
+            actionUrl: actionUrl,
+            frontendBaseUrl: FrontendBaseUrl);
 
-        return SendAsync(email, "GreenMind admin invitation", body, cancellationToken);
+        return SendAsync(
+            to: email,
+            subject: "دعوة للانضمام إلى منصة GreenMind | Admin Invitation",
+            htmlBody: htmlBody,
+            cancellationToken: cancellationToken);
+    }
+
+    public Task SendAccountActivationAsync(
+        string email,
+        string fullName,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        var activationUrl = FrontendUrl("/auth/activate-account?email=" + Uri.EscapeDataString(email) + "&token=" + Uri.EscapeDataString(token));
+        var htmlBody = EmailTemplateBuilder.BuildAccountActivationEmail(
+            fullName: fullName,
+            email: email,
+            activationUrl: activationUrl,
+            frontendBaseUrl: FrontendBaseUrl);
+
+        return SendAsync(
+            to: email,
+            subject: "تفعيل حسابك في منصة جرين مايند | Activate Your GreenMind Account",
+            htmlBody: htmlBody,
+            cancellationToken: cancellationToken);
     }
 
     public Task SendRegistrationReceivedAsync(
@@ -49,18 +74,18 @@ public sealed class AccountEmailService(
         string farmName,
         CancellationToken cancellationToken = default)
     {
-        var body = BuildEmail(
-            "Your GreenMind request is under review",
-            $"Hello {Encode(fullName)},",
-            $"Thanks for registering {Encode(farmName)} with GreenMind. We received your request and our admin team is reviewing the farm details.",
-            "Open GreenMind",
-            FrontendUrl("/auth/login"),
-            [
-                ("Current status", "Waiting for admin approval"),
-                ("Next step", "We will email you as soon as your account is approved")
-            ]);
+        var loginUrl = FrontendUrl("/auth/login");
+        var htmlBody = EmailTemplateBuilder.BuildRegistrationReceivedEmail(
+            fullName: fullName,
+            farmName: farmName,
+            loginUrl: loginUrl,
+            frontendBaseUrl: FrontendBaseUrl);
 
-        return SendAsync(email, "GreenMind registration received", body, cancellationToken);
+        return SendAsync(
+            to: email,
+            subject: "تم استلام طلب تسجيل المزرعة | GreenMind Registration Received",
+            htmlBody: htmlBody,
+            cancellationToken: cancellationToken);
     }
 
     public async Task SendNewRegistrationAlertAsync(
@@ -82,22 +107,23 @@ public sealed class AccountEmailService(
             return;
         }
 
-        var body = BuildEmail(
-            "New farm account needs approval",
-            "Hello GreenMind admin,",
-            $"{Encode(fullName)} registered {Encode(farmName)} and is waiting for account approval.",
-            "Review farm accounts",
-            FrontendUrl("/admin-dashboard/accounts"),
-            [
-                ("Farm", Encode(farmName)),
-                ("Owner", Encode(fullName)),
-                ("Email", Encode(email)),
-                ("Farm ID", farmId.ToString())
-            ]);
+        var reviewUrl = FrontendUrl("/admin-dashboard/accounts");
+        var htmlBody = EmailTemplateBuilder.BuildNewRegistrationAlertEmail(
+            adminFullName: "Admin",
+            ownerFullName: fullName,
+            ownerEmail: email,
+            farmName: farmName,
+            farmId: farmId,
+            reviewUrl: reviewUrl,
+            frontendBaseUrl: FrontendBaseUrl);
 
         foreach (var recipient in recipients)
         {
-            await SendAsync(recipient, "New GreenMind farm registration", body, cancellationToken);
+            await SendAsync(
+                to: recipient,
+                subject: $"طلب تسجيل مزرعة جديدة (#{farmId}) | New Farm Registration",
+                htmlBody: htmlBody,
+                cancellationToken: cancellationToken);
         }
     }
 
@@ -107,25 +133,38 @@ public sealed class AccountEmailService(
         string farmName,
         CancellationToken cancellationToken = default)
     {
-        var body = BuildEmail(
-            "Your GreenMind account is approved",
-            $"Welcome, {Encode(fullName)}.",
-            $"{Encode(farmName)} is now active. You can sign in and start building export plans, tracking tasks, and managing farm data from your dashboard.",
-            "Go to dashboard",
-            FrontendUrl("/dashboard"),
-            [
-                ("Account status", "Approved and active"),
-                ("Farm", Encode(farmName))
-            ]);
+        var dashboardUrl = FrontendUrl("/dashboard");
+        var htmlBody = EmailTemplateBuilder.BuildFarmApprovedEmail(
+            fullName: fullName,
+            farmName: farmName,
+            dashboardUrl: dashboardUrl,
+            frontendBaseUrl: FrontendBaseUrl);
 
-        return SendAsync(email, "Your GreenMind account is approved", body, cancellationToken);
+        return SendAsync(
+            to: email,
+            subject: "تهانينا! تم اعتماد وتفعيل حساب مزرعتك | GreenMind Farm Approved",
+            htmlBody: htmlBody,
+            cancellationToken: cancellationToken);
     }
 
-    public Task SendPasswordResetAsync(string email, string fullName, string token, CancellationToken cancellationToken = default)
+    public Task SendPasswordResetAsync(
+        string email,
+        string fullName,
+        string token,
+        CancellationToken cancellationToken = default)
     {
-        var url = FrontendUrl("/auth/reset-password?email=" + Uri.EscapeDataString(email) + "&token=" + Uri.EscapeDataString(token));
-        var body = BuildEmail("Reset your GreenMind password", $"Hello {Encode(fullName)},", "Use the button below to choose a new password. This link expires soon.", "Reset password", url, [("Validity", "1 hour")]);
-        return SendAsync(email, "GreenMind password reset", body, cancellationToken);
+        var resetUrl = FrontendUrl("/auth/reset-password?email=" + Uri.EscapeDataString(email) + "&token=" + Uri.EscapeDataString(token));
+        var htmlBody = EmailTemplateBuilder.BuildPasswordResetEmail(
+            fullName: fullName,
+            email: email,
+            resetUrl: resetUrl,
+            frontendBaseUrl: FrontendBaseUrl);
+
+        return SendAsync(
+            to: email,
+            subject: "إعادة تعيين كلمة المرور | GreenMind Password Reset",
+            htmlBody: htmlBody,
+            cancellationToken: cancellationToken);
     }
 
     private async Task SendAsync(
@@ -136,19 +175,35 @@ public sealed class AccountEmailService(
     {
         if (!IsConfigured)
         {
-            throw new InvalidOperationException("SMTP credentials are not configured.");
+            throw new InvalidOperationException("Gmail / SMTP credentials are not configured. Please set Smtp:UserName and Smtp:Password in appsettings.json or user secrets.");
         }
 
         var settings = configuration.GetSection("Smtp");
-        using var client = new SmtpClient(settings["Host"], settings.GetValue("Port", 587))
+        var host = string.IsNullOrWhiteSpace(settings["Host"]) ? DefaultGmailHost : settings["Host"]!.Trim();
+        var port = settings.GetValue("Port", DefaultPort);
+        var useSsl = settings.GetValue("UseSsl", true);
+        var userName = settings["UserName"]!.Trim();
+        
+        // Sanitize password: Google App Passwords are often generated as 4-character blocks separated by spaces (e.g., 'abcd efgh ijkl mnop').
+        var rawPassword = (settings["Password"] ?? settings["ApiKey"]) ?? string.Empty;
+        var password = rawPassword.Replace(" ", string.Empty).Trim();
+
+        var fromAddress = string.IsNullOrWhiteSpace(settings["From"]) ? userName : settings["From"]!.Trim();
+        var displayName = string.IsNullOrWhiteSpace(settings["DisplayName"]) ? DefaultDisplayName : settings["DisplayName"]!.Trim();
+
+        using var client = new SmtpClient(host, port)
         {
-            EnableSsl = settings.GetValue("UseSsl", true),
-            Credentials = new NetworkCredential(settings["UserName"], settings["Password"])
+            EnableSsl = useSsl,
+            DeliveryMethod = SmtpDeliveryMethod.Network,
+            UseDefaultCredentials = false,
+            Credentials = new NetworkCredential(userName, password),
+            Timeout = 30000
         };
 
+        var from = new MailAddress(fromAddress, displayName, Encoding.UTF8);
         using var message = new MailMessage
         {
-            From = new MailAddress(settings["From"]!),
+            From = from,
             Subject = subject,
             Body = htmlBody,
             IsBodyHtml = true,
@@ -156,8 +211,10 @@ public sealed class AccountEmailService(
             SubjectEncoding = Encoding.UTF8
         };
         message.To.Add(to);
+
+        var plainText = EmailTemplateBuilder.StripHtmlForPlainText(htmlBody);
         message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-            StripHtmlForPlainText(htmlBody),
+            plainText,
             Encoding.UTF8,
             MediaTypeNames.Text.Plain));
         message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
@@ -165,70 +222,26 @@ public sealed class AccountEmailService(
             Encoding.UTF8,
             MediaTypeNames.Text.Html));
 
-        await client.SendMailAsync(message, cancellationToken);
+        try
+        {
+            await client.SendMailAsync(message, cancellationToken);
+            logger.LogInformation("Successfully sent email '{Subject}' to {Recipient} via {Host}:{Port}.", subject, to, host, port);
+        }
+        catch (SmtpException ex)
+        {
+            logger.LogError(ex, "Failed to send email '{Subject}' to {Recipient} via {Host}:{Port}. Verify your Gmail App Password and 2-Step Verification settings.", subject, to, host, port);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error sending email '{Subject}' to {Recipient}.", subject, to);
+            throw;
+        }
     }
+
+    private string FrontendBaseUrl =>
+        (configuration["Frontend:PublicUrl"] ?? "http://localhost:4200").TrimEnd('/');
 
     private string FrontendUrl(string path) =>
-        (configuration["Frontend:PublicUrl"] ?? "http://localhost:4200").TrimEnd('/') + path;
-
-    private static string BuildEmail(
-        string title,
-        string greeting,
-        string body,
-        string actionLabel,
-        string actionUrl,
-        IReadOnlyList<(string Label, string Value)> details)
-    {
-        var detailRows = string.Join("", details.Select(item => $"""
-            <tr>
-              <td style="padding:10px 0;color:#65736c;font-size:13px;">{item.Label}</td>
-              <td style="padding:10px 0;color:#10231b;font-size:13px;font-weight:700;text-align:right;">{item.Value}</td>
-            </tr>
-            """));
-
-        return $"""
-            <!doctype html>
-            <html lang="en">
-            <body style="margin:0;background:#f4f7f4;font-family:Arial,'Segoe UI',sans-serif;color:#10231b;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7f4;padding:32px 16px;">
-                <tr>
-                  <td align="center">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #dde6df;border-radius:20px;overflow:hidden;">
-                      <tr>
-                        <td style="background:#10231b;padding:26px 30px;">
-                          <div style="color:#d8f36a;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">GreenMind</div>
-                          <h1 style="margin:10px 0 0;color:#ffffff;font-size:25px;line-height:1.25;">{Encode(title)}</h1>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:30px;">
-                          <p style="margin:0 0 12px;font-size:16px;font-weight:700;">{greeting}</p>
-                          <p style="margin:0;color:#526158;font-size:15px;line-height:1.7;">{body}</p>
-                          <p style="margin:28px 0;">
-                            <a href="{Encode(actionUrl)}" style="display:inline-block;border-radius:12px;background:#0f7a3d;color:#ffffff;font-size:14px;font-weight:800;text-decoration:none;padding:13px 18px;">{Encode(actionLabel)}</a>
-                          </p>
-                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #edf1ee;border-bottom:1px solid #edf1ee;margin-top:8px;">
-                            {detailRows}
-                          </table>
-                          <p style="margin:22px 0 0;color:#8a968f;font-size:12px;line-height:1.6;">This message was sent automatically by GreenMind.</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </body>
-            </html>
-            """;
-    }
-
-    private static string Encode(string value) => HtmlEncoder.Default.Encode(value);
-
-    private static string StripHtmlForPlainText(string html) =>
-        System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ")
-            .Replace("&nbsp;", " ")
-            .Replace("&amp;", "&")
-            .Replace("&lt;", "<")
-            .Replace("&gt;", ">")
-            .Trim();
+        FrontendBaseUrl + (path.StartsWith('/') ? path : "/" + path);
 }

@@ -20,7 +20,7 @@ public sealed class AdminInvitationController(UserManager<ApplicationUser> users
         var invitation = await db.AdminInvitations.SingleOrDefaultAsync(item => item.TokenHash == hash, cancellationToken);
         if (invitation is null || invitation.AcceptedAtUtc is not null || invitation.RevokedAtUtc is not null || invitation.ExpiresAtUtc < DateTime.UtcNow) return BadRequest(new { message = "This invitation is invalid or expired." });
         if (await users.FindByEmailAsync(invitation.Email) is not null) return BadRequest(new { message = "This invitation is no longer available." });
-        var user = new ApplicationUser { UserName = invitation.Email, Email = invitation.Email, FullName = invitation.FullName, IsActive = true };
+        var user = new ApplicationUser { UserName = invitation.Email, Email = invitation.Email, FullName = invitation.FullName, IsActive = true, EmailConfirmed = true };
         var created = await users.CreateAsync(user, request.Password); if (!created.Succeeded) return BadRequest(created.Errors.Select(error => error.Description));
         await users.AddToRoleAsync(user, RoleNames.Admin); invitation.AcceptedAtUtc = DateTime.UtcNow; await db.SaveChangesAsync(cancellationToken); return NoContent();
     }

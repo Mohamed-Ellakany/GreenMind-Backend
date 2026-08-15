@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPlatformAdminService, PlatformAdminService>();
         services.AddScoped<IAiUsageAdminService, AiUsageAdminService>();
+        services.AddScoped<IAiLimitRequestService, AiLimitRequestService>();
         services.AddScoped<IPlatformStatisticsService, PlatformStatisticsService>();
         services.AddScoped<IMasterDataQueryService, PlatformAdminService>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);

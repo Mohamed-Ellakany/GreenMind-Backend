@@ -65,7 +65,10 @@ public sealed class ExportPlanPlanningService(
                 Governorate = plan.Governorate, City = plan.City, Latitude = plan.Latitude, Longitude = plan.Longitude,
                 AreaInFeddan = plan.AreaInFeddan, PlantingDate = plan.PlantingDate,
                 ExpectedHarvestDate = plan.ExpectedHarvestDate, ExpectedExportDate = plan.ExpectedExportDate,
-                CurrentSeasonDay = season.CurrentSeasonDay, GrowthStage = season.GrowthStage, Notes = plan.Notes
+                CurrentSeasonDay = season.CurrentSeasonDay, GrowthStage = season.GrowthStage, Notes = plan.Notes,
+                FarmType = plan.FarmType, SoilType = plan.SoilType, IrrigationSystem = plan.IrrigationSystem, Fertigation = plan.Fertigation,
+                SoilPh = plan.SoilPh, SoilEc = plan.SoilEc, SoilNitrogen = plan.SoilNitrogen, SoilPhosphorus = plan.SoilPhosphorus, SoilPotassium = plan.SoilPotassium, SoilOrganicMatter = plan.SoilOrganicMatter,
+                WaterPh = plan.WaterPh, WaterEc = plan.WaterEc, WaterSalinity = plan.WaterSalinity, WaterSodium = plan.WaterSodium, WaterChloride = plan.WaterChloride, WaterBicarbonate = plan.WaterBicarbonate, WaterCalcium = plan.WaterCalcium, WaterMagnesium = plan.WaterMagnesium, WaterSar = plan.WaterSar
             },
             PlanningWindow = new PlanningWindowDto { StartDate = start, EndDate = end, DaysToGenerate = end.DayNumber - start.DayNumber + 1 },
             LatestSoilMeasurement = latestSoil,
@@ -195,7 +198,26 @@ public sealed class ExportPlanPlanningService(
                 ExpectedExportDate = plan.ExpectedExportDate,
                 CurrentSeasonDay = season.CurrentSeasonDay,
                 GrowthStage = season.GrowthStage,
-                Notes = plan.Notes
+                Notes = plan.Notes,
+                FarmType = plan.FarmType,
+                SoilType = plan.SoilType,
+                IrrigationSystem = plan.IrrigationSystem,
+                Fertigation = plan.Fertigation,
+                SoilPh = plan.SoilPh,
+                SoilEc = plan.SoilEc,
+                SoilNitrogen = plan.SoilNitrogen,
+                SoilPhosphorus = plan.SoilPhosphorus,
+                SoilPotassium = plan.SoilPotassium,
+                SoilOrganicMatter = plan.SoilOrganicMatter,
+                WaterPh = plan.WaterPh,
+                WaterEc = plan.WaterEc,
+                WaterSalinity = plan.WaterSalinity,
+                WaterSodium = plan.WaterSodium,
+                WaterChloride = plan.WaterChloride,
+                WaterBicarbonate = plan.WaterBicarbonate,
+                WaterCalcium = plan.WaterCalcium,
+                WaterMagnesium = plan.WaterMagnesium,
+                WaterSar = plan.WaterSar
             },
             PlanningWindow = new PlanningWindowDto
             {

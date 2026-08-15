@@ -1,4 +1,4 @@
-﻿using Greenmind.Application.Dtos.AI;
+using Greenmind.Application.Dtos.AI;
 using Greenmind.Domain.Consts;
 using System.Text.Json;
 
@@ -22,6 +22,13 @@ namespace Greenmind.Infrastructure.Agents.Prompts
                 {{request.ExportPlan.City}}, {{request.ExportPlan.Governorate}} (display labels only).
                 The authoritative farm location for climate and weather is
                 {{request.ExportPlan.Latitude}},{{request.ExportPlan.Longitude}}.
+                Farm Environment & Specifications:
+                - Farm Type: {{request.ExportPlan.FarmType ?? "Unspecified"}}
+                - Soil Type: {{request.ExportPlan.SoilType ?? "Unspecified"}}
+                - Irrigation System: {{request.ExportPlan.IrrigationSystem ?? "Unspecified"}}
+                - Fertigation: {{request.ExportPlan.Fertigation ?? "Unspecified"}}
+                - Baseline Soil Analysis: pH={{request.ExportPlan.SoilPh?.ToString() ?? "N/A"}}, EC={{request.ExportPlan.SoilEc?.ToString() ?? "N/A"}}, N={{request.ExportPlan.SoilNitrogen?.ToString() ?? "N/A"}}, P={{request.ExportPlan.SoilPhosphorus?.ToString() ?? "N/A"}}, K={{request.ExportPlan.SoilPotassium?.ToString() ?? "N/A"}}, OrganicMatter={{request.ExportPlan.SoilOrganicMatter?.ToString() ?? "N/A"}}%
+                - Irrigation Water Analysis: pH={{request.ExportPlan.WaterPh?.ToString() ?? "N/A"}}, EC={{request.ExportPlan.WaterEc?.ToString() ?? "N/A"}}, Salinity={{request.ExportPlan.WaterSalinity?.ToString() ?? "N/A"}}, Na={{request.ExportPlan.WaterSodium?.ToString() ?? "N/A"}}, Cl={{request.ExportPlan.WaterChloride?.ToString() ?? "N/A"}}, HCO3={{request.ExportPlan.WaterBicarbonate?.ToString() ?? "N/A"}}, Ca={{request.ExportPlan.WaterCalcium?.ToString() ?? "N/A"}}, Mg={{request.ExportPlan.WaterMagnesium?.ToString() ?? "N/A"}}, SAR={{request.ExportPlan.WaterSar?.ToString() ?? "N/A"}}
 
                 The backend has already gathered live weather by those exact coordinates, soil measurements, task history,
                 existing schedule, and administrator-uploaded regulatory data included in the request.
@@ -39,9 +46,8 @@ namespace Greenmind.Infrastructure.Agents.Prompts
 
                 Planning rules:
                 - Only generate tasks within planningWindow.startDate to planningWindow.endDate.
-                - Adjust irrigation based on forecasted rain/humidity (skip or reduce irrigation on rainy days,
-                  increase on hot/dry/windy days).
-                - Adjust fertilization based on latest soil N/P/K/pH/EC — flag deficiencies explicitly in task descriptions.
+                - Tailor irrigation tasks and frequencies to the Irrigation System ({{request.ExportPlan.IrrigationSystem ?? "General"}}), soil type ({{request.ExportPlan.SoilType ?? "General"}}), and forecasted rain/temperature.
+                - Tailor fertilization and fertigation tasks to the baseline soil N/P/K/pH/EC, water salinity/SAR, and Fertigation capability ({{request.ExportPlan.Fertigation ?? "General"}}). Explicitly address nutrient needs or salinity precautions in task descriptions.
                 - If a previous week's task was not completed, consider whether it needs to be rescheduled into this window,
                   and note that in the task description.
                 - Any PestControl task's plannedDate must respect the PHI you retrieved (or the fallback) before
