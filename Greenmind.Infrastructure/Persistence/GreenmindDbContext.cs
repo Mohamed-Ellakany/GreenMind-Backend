@@ -40,6 +40,7 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<SupportConversation> SupportConversations => Set<SupportConversation>();
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
+    public DbSet<AiLimitRequest> AiLimitRequests => Set<AiLimitRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,6 +59,26 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
         modelBuilder.Entity<ApplicationUser>()
             .Property(user => user.IsAiAccessSuspended)
             .HasDefaultValue(false);
+
+        modelBuilder.Entity<ApplicationUser>()
+            .Property(user => user.AiUsageLimitUsd)
+            .HasDefaultValue(0.10m);
+
+        modelBuilder.Entity<AiLimitRequest>(entity =>
+        {
+            entity.HasIndex(item => new { item.UserId, item.Status });
+            entity.Property(item => item.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.HasOne(item => item.User)
+                .WithMany(user => user.AiLimitRequests)
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(item => item.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
 
         modelBuilder.Entity<AiUsageRecord>(entity =>
         {

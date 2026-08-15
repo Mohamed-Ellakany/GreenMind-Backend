@@ -50,7 +50,7 @@ public class TasksIntegrationTests : IClassFixture<WebApplicationFactory<Program
 
         if (!await roleManager.RoleExistsAsync("FarmOwner")) await roleManager.CreateAsync(new IdentityRole("FarmOwner"));
 
-        var user = new ApplicationUser { UserName = email, Email = email, FullName = "Owner", IsActive = true };
+        var user = new ApplicationUser { UserName = email, Email = email, FullName = "Owner", IsActive = true, EmailConfirmed = true };
         await userManager.CreateAsync(user, "P@ssword123");
         await userManager.AddToRoleAsync(user, "FarmOwner");
 

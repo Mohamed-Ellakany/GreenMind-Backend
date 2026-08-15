@@ -37,7 +37,8 @@ public static class SeedExtensions
                 UserName = adminEmail,
                 Email = adminEmail,
                 FullName = "Platform Admin",
-                IsActive = true
+                IsActive = true,
+                EmailConfirmed = true
             };
 
             var pw = "ChangeMe!P@ssw0rd"; // override in production

@@ -111,7 +111,7 @@ public sealed class AdminManagementController(
         }
         catch (SmtpException exception)
         {
-            logger.LogError(exception, "MailerSend rejected an admin invitation email to {RecipientDomain}.",
+            logger.LogError(exception, "The email provider rejected an admin invitation email to {RecipientDomain}.",
                 email[(email.LastIndexOf('@') + 1)..]);
             return Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "Email service unavailable", detail: "The email provider rejected the message. Verify the SMTP credentials and sender domain.");

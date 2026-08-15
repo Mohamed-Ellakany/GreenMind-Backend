@@ -23,6 +23,9 @@ public interface IAiUsageTracker
 public sealed class AiAccessSuspendedException() : InvalidOperationException(
     "AI access is suspended for this account.");
 
+public sealed class AiUsageLimitExceededException() : InvalidOperationException(
+    "AI usage limit exceeded for this account.");
+
 public sealed class AiUsageTracker(
     IServiceScopeFactory scopeFactory,
     ILogger<AiUsageTracker> logger) : IAiUsageTracker
@@ -40,13 +43,24 @@ public sealed class AiUsageTracker(
         if (attribution.UserId is null)
             return;
 
-        var suspended = await db.Users
+        var user = await db.Users
             .AsNoTracking()
-            .Where(user => user.Id == attribution.UserId)
-            .Select(user => user.IsAiAccessSuspended)
+            .Where(u => u.Id == attribution.UserId)
+            .Select(u => new { u.IsAiAccessSuspended, u.AiUsageLimitUsd })
             .SingleOrDefaultAsync(cancellationToken);
-        if (suspended)
+        if (user is null)
+            return;
+
+        if (user.IsAiAccessSuspended)
             throw new AiAccessSuspendedException();
+
+        var totalCostUsd = await db.AiUsageRecords
+            .AsNoTracking()
+            .Where(record => record.UserId == attribution.UserId)
+            .SumAsync(record => (decimal?)record.ActualCostUsd, cancellationToken) ?? 0m;
+
+        if (totalCostUsd >= user.AiUsageLimitUsd)
+            throw new AiUsageLimitExceededException();
     }
 
     public async Task RecordCompletedAsync(

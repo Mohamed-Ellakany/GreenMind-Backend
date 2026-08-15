@@ -24,8 +24,8 @@ dotnet user-secrets set --project Greenmind.Api "Weather:ApiKey" "YOUR_WEATHER_A
 dotnet user-secrets set --project Greenmind.Api "iti:ApiKey" "YOUR_SBG_API_KEY"
 dotnet user-secrets set --project Greenmind.Api "iti:Model" "anthropic.claude-sonnet-4-6"
 dotnet user-secrets set --project Greenmind.Api "iti:VisionModel" "anthropic.claude-haiku-4-5-20251001-v1:0"
-dotnet user-secrets set --project Greenmind.Api "Smtp:UserName" "YOUR_MAILERSEND_SMTP_USERNAME"
-dotnet user-secrets set --project Greenmind.Api "Smtp:Password" "YOUR_MAILERSEND_SMTP_PASSWORD"
+dotnet user-secrets set --project Greenmind.Api "Smtp:UserName" "your-email@gmail.com"
+dotnet user-secrets set --project Greenmind.Api "Smtp:Password" "your-16-char-google-app-password"
 dotnet ef database update --project Greenmind.Infrastructure --startup-project Greenmind.Api
 ```
 
@@ -33,13 +33,18 @@ Alternatively, set the gateway key in the environment as `SBG_API_KEY`. Do not c
 keys. The chat gateway requires one of these values; without it, failed chat requests are
 recorded in the application log with the gateway status and response.
 
-Admin invitations use MailerSend's SMTP relay on port 587 with STARTTLS. The sender in
-`Greenmind.Api/appsettings.json` must belong to a verified MailerSend domain. Keep the
-SMTP username and password in user secrets locally, or provide them in deployment as
-`Smtp__UserName` and `Smtp__Password` environment variables.
+### Gmail Email Provider Setup
+Email notifications (admin invitations, password resets, registration notifications, and approval emails) use **Gmail SMTP** (`smtp.gmail.com` on port 587 with STARTTLS).
 
-MailerSend trial accounts can send to only two recipient addresses. To invite arbitrary
-administrators, complete account approval and use your own verified sending domain.
+To configure Gmail:
+1. Enable **2-Step Verification** on your Google Account: (Google Account -> Security -> 2-Step Verification).
+2. Generate an **App Password**: (Google Account -> Security -> 2-Step Verification -> App passwords). Select app name (e.g. `GreenMind`) and copy the generated 16-character key.
+3. Configure `appsettings.json` or user secrets:
+   - `Smtp:UserName`: Your Gmail address (e.g., `your-email@gmail.com`)
+   - `Smtp:Password`: Your 16-character App Password (spaces will be automatically trimmed)
+   - `Smtp:From`: (Optional, defaults to your `UserName`)
+   - `Smtp:DisplayName`: Sender name (e.g., `"GreenMind | نظام العقل الأخضر"`)
+   - In production / Docker, provide them as environment variables `Smtp__UserName` and `Smtp__Password`.
 
 Serilog writes application and HTTP request events to the SQL Server `Logs` table created
 by the `AddSerilogLogs` EF migration. It uses `ConnectionStrings:online` when that value
