@@ -133,6 +133,8 @@ public sealed class AccountEmailServiceTests
             activationUrl: "https://greenmind.local/auth/activate-account?email=farmer%40greenmind.local&token=act123",
             frontendBaseUrl: "https://greenmind.local");
 
+        Assert.Contains("GreenMind", html);
+        Assert.Contains("cid:greenmind-logo", html);
         Assert.Contains("Farmer John", html);
         Assert.Contains("farmer@greenmind.local", html);
         Assert.Contains("Activate Account", html);
@@ -149,10 +151,60 @@ public sealed class AccountEmailServiceTests
             resetUrl: "https://greenmind.local/auth/reset-password?email=sarah%40cyber.local&token=tok456",
             frontendBaseUrl: "https://greenmind.local");
 
+        Assert.Contains("cid:greenmind-logo", html);
         Assert.Contains("Sarah Connor", html);
         Assert.Contains("sarah@cyber.local", html);
         Assert.Contains("1 Hour", html);
         Assert.Contains("https://greenmind.local/auth/reset-password?email=sarah%40cyber.local&amp;token=tok456", html);
         Assert.Contains("Security Notice", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DynamicBaseUrl_ResolvesFromHttpContextOrigin_WhenConfigIsDefault()
+    {
+        var configData = new Dictionary<string, string?>
+        {
+            ["Frontend:PublicUrl"] = "http://localhost:4200"
+        };
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(configData).Build();
+        
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers.Origin = "https://app.greenmind.com";
+
+        var httpContextAccessor = new Microsoft.AspNetCore.Http.HttpContextAccessor
+        {
+            HttpContext = httpContext
+        };
+
+        var service = new AccountEmailService(configuration, NullLogger<AccountEmailService>.Instance, httpContextAccessor);
+        // We can test private FrontendBaseUrl resolution via public method or reflection
+        var prop = typeof(AccountEmailService).GetProperty("FrontendBaseUrl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var resolvedUrl = prop?.GetValue(service) as string;
+
+        Assert.Equal("https://app.greenmind.com", resolvedUrl);
+    }
+
+    [Fact]
+    public void DynamicBaseUrl_PrioritizesConfiguredProductionDomain()
+    {
+        var configData = new Dictionary<string, string?>
+        {
+            ["Frontend:PublicUrl"] = "https://production.greenmind.com"
+        };
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(configData).Build();
+        
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers.Origin = "https://some-other-domain.com";
+
+        var httpContextAccessor = new Microsoft.AspNetCore.Http.HttpContextAccessor
+        {
+            HttpContext = httpContext
+        };
+
+        var service = new AccountEmailService(configuration, NullLogger<AccountEmailService>.Instance, httpContextAccessor);
+        var prop = typeof(AccountEmailService).GetProperty("FrontendBaseUrl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var resolvedUrl = prop?.GetValue(service) as string;
+
+        Assert.Equal("https://production.greenmind.com", resolvedUrl);
     }
 }

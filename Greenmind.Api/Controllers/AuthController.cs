@@ -28,6 +28,7 @@ public class AuthController : ControllerBase
 
     private const string FarmOwnerRole = "FarmOwner";
     private readonly Greenmind.Application.Services.IJwtTokenService _jwtService;
+    private readonly IConfiguration _configuration;
 
     public AuthController(UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
@@ -35,6 +36,7 @@ public class AuthController : ControllerBase
         GreenmindDbContext db,
         Greenmind.Application.Services.IJwtTokenService jwtService,
         IAccountEmailService emailService,
+        IConfiguration configuration,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -43,6 +45,7 @@ public class AuthController : ControllerBase
         _db = db;
         _jwtService = jwtService;
         _emailService = emailService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -184,6 +187,51 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { Message = "Account activated successfully. You can now log in." });
+    }
+
+    [AllowAnonymous]
+    [HttpGet("activate-account")]
+    public async Task<IActionResult> ActivateAccountFromQuery(
+        [FromQuery] string email,
+        [FromQuery] string token,
+        CancellationToken cancellationToken)
+    {
+        var frontendBaseUrl = (_configuration["Frontend:PublicUrl"] ?? "http://localhost:4200").TrimEnd('/');
+
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
+        {
+            return Redirect($"{frontendBaseUrl}/auth/activate-account?error=missing_parameters");
+        }
+
+        var user = await _userManager.FindByEmailAsync(email.Trim());
+        if (user is null)
+        {
+            return Redirect($"{frontendBaseUrl}/auth/activate-account?email={Uri.EscapeDataString(email)}&error=user_not_found");
+        }
+
+        if (user.IsActive && user.EmailConfirmed)
+        {
+            return Redirect($"{frontendBaseUrl}/auth/login?already_activated=true");
+        }
+
+        var result = await _userManager.ConfirmEmailAsync(user, token);
+        if (!result.Succeeded)
+        {
+            return Redirect($"{frontendBaseUrl}/auth/activate-account?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}&error=invalid_token");
+        }
+
+        user.IsActive = true;
+        await _userManager.UpdateAsync(user);
+
+        var farm = await _db.Farms.SingleOrDefaultAsync(f => f.OwnerUserId == user.Id, cancellationToken);
+        if (farm is not null && !farm.IsApproved)
+        {
+            farm.IsApproved = true;
+            farm.ApprovedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Redirect($"{frontendBaseUrl}/auth/login?activated=true");
     }
 
     [AllowAnonymous]

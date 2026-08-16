@@ -41,10 +41,17 @@ public class GreenmindDbContext(DbContextOptions<GreenmindDbContext> options)
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
     public DbSet<AiLimitRequest> AiLimitRequests => Set<AiLimitRequest>();
+    public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<ContactMessage>(entity =>
+        {
+            entity.HasIndex(item => item.CreatedAt);
+            entity.HasIndex(item => item.IsRead);
+        });
 
         modelBuilder.Entity<AdminInvitation>(entity =>
         {
