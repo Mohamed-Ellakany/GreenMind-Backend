@@ -354,7 +354,7 @@ public static class EmailTemplateBuilder
                                                         <tr>
                                                             <td style="vertical-align:middle; padding-right:12px;">
                                                                 <div style="width:38px; height:38px; background:#ffffff; border-radius:10px; text-align:center; line-height:38px; overflow:hidden; display:inline-block;">
-                                                                    <img src="{Encode(frontendBaseUrl)}/logo.png" width="38" height="38" alt="GreenMind" style="display:block; width:38px; height:38px; object-fit:contain; border:0;" />
+                                                                    <img src="cid:greenmind-logo" width="38" height="38" alt="GreenMind" style="display:block; width:38px; height:38px; object-fit:contain; border:0;" />
                                                                 </div>
                                                             </td>
                                                             <td style="vertical-align:middle;">
@@ -481,46 +481,24 @@ public static class EmailTemplateBuilder
 
     private static string GetIconSvg(IconType type)
     {
-        var (bgColor, strokeColor, svgContent) = type switch
+        var (bgColor, textColor, symbol) = type switch
         {
-            IconType.Invitation => (
-                "#e8f7ed",
-                "#087a42",
-                """<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#087a42" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 6l-10 7L2 6" stroke="#087a42" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"""
-            ),
-            IconType.Review => (
-                "#fef3c7",
-                "#b45309",
-                """<circle cx="12" cy="12" r="10" stroke="#b45309" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"""
-            ),
-            IconType.Alert => (
-                "#fef3c7",
-                "#b45309",
-                """<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"""
-            ),
-            IconType.Approved => (
-                "#e8f7ed",
-                "#087a42",
-                """<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="#087a42" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="22 4 12 14.01 9 11.01" stroke="#087a42" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"""
-            ),
-            IconType.PasswordReset => (
-                "#fee2e2",
-                "#be3a34",
-                """<rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="#be3a34" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#be3a34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"""
-            ),
-            _ => (
-                "#e8f7ed",
-                "#087a42",
-                """<circle cx="12" cy="12" r="10" stroke="#087a42" stroke-width="2"/>"""
-            )
+            IconType.Invitation => ("#e8f7ed", "#087a42", "&#9993;"),
+            IconType.Review => ("#fef3c7", "#b45309", "&#9203;"),
+            IconType.Alert => ("#fef3c7", "#b45309", "&#128276;"),
+            IconType.Approved => ("#e8f7ed", "#087a42", "&#10004;"),
+            IconType.PasswordReset => ("#fee2e2", "#be3a34", "&#128274;"),
+            _ => ("#e8f7ed", "#087a42", "&#10004;")
         };
 
         return $"""
-            <div style="display:inline-block; width:44px; height:44px; background-color:{bgColor}; border-radius:12px; text-align:center; line-height:44px;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle; display:inline-block;">
-                    {svgContent}
-                </svg>
-            </div>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="display:inline-block; vertical-align:middle; border-collapse:separate;">
+                <tr>
+                    <td align="center" style="width:46px; height:46px; background-color:{bgColor}; border-radius:12px; font-size:22px; line-height:46px; text-align:center; vertical-align:middle; color:{textColor}; font-family:'Segoe UI Emoji', 'Apple Color Emoji', Arial, sans-serif;">
+                        {symbol}
+                    </td>
+                </tr>
+            </table>
             """;
     }
 

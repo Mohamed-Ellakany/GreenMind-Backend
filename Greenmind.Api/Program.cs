@@ -16,6 +16,7 @@ using System.Text.Json.Serialization;
 using Greenmind.Infrastructure.Storage;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+
 using Serilog;
 using Serilog.Sinks.MSSqlServer;
 using Greenmind.Api.Services;
@@ -42,8 +43,8 @@ namespace Greenmind.Api
                     });
             });
 
-
             // Add services to the container.
+            builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
 
             // Files under this root are private application data. The app intentionally

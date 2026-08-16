@@ -2,22 +2,38 @@ using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
 using System.Text;
+using Microsoft.AspNetCore.Http;
 
 namespace Greenmind.Api.Services;
 
-public sealed class AccountEmailService(
-    IConfiguration configuration,
-    ILogger<AccountEmailService> logger) : IAccountEmailService
+public sealed class AccountEmailService : IAccountEmailService
 {
     private const string DefaultGmailHost = "smtp.gmail.com";
     private const int DefaultPort = 587;
     private const string DefaultDisplayName = "GreenMind | نظام العقل الأخضر";
 
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<AccountEmailService> _logger;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
+
+    private static byte[]? _cachedLogoBytes;
+    private static readonly object _logoLock = new();
+
+    public AccountEmailService(
+        IConfiguration configuration,
+        ILogger<AccountEmailService> logger,
+        IHttpContextAccessor? httpContextAccessor = null)
+    {
+        _configuration = configuration;
+        _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
+    }
+
     public bool IsConfigured
     {
         get
         {
-            var settings = configuration.GetSection("Smtp");
+            var settings = _configuration.GetSection("Smtp");
             var userName = settings["UserName"]?.Trim();
             var password = (settings["Password"] ?? settings["ApiKey"])?.Trim();
             var from = (settings["From"] ?? userName)?.Trim();
@@ -103,7 +119,7 @@ public sealed class AccountEmailService(
 
         if (recipients.Length == 0)
         {
-            logger.LogInformation("No active admin email addresses found for farm registration alert {FarmId}.", farmId);
+            _logger.LogInformation("No active admin email addresses found for farm registration alert {FarmId}.", farmId);
             return;
         }
 
@@ -178,7 +194,7 @@ public sealed class AccountEmailService(
             throw new InvalidOperationException("Gmail / SMTP credentials are not configured. Please set Smtp:UserName and Smtp:Password in appsettings.json or user secrets.");
         }
 
-        var settings = configuration.GetSection("Smtp");
+        var settings = _configuration.GetSection("Smtp");
         var host = string.IsNullOrWhiteSpace(settings["Host"]) ? DefaultGmailHost : settings["Host"]!.Trim();
         var port = settings.GetValue("Port", DefaultPort);
         var useSsl = settings.GetValue("UseSsl", true);
@@ -217,31 +233,158 @@ public sealed class AccountEmailService(
             plainText,
             Encoding.UTF8,
             MediaTypeNames.Text.Plain));
-        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
+
+        var htmlView = AlternateView.CreateAlternateViewFromString(
             htmlBody,
             Encoding.UTF8,
-            MediaTypeNames.Text.Html));
+            MediaTypeNames.Text.Html);
+
+        // Attach logo inline via MIME LinkedResource with Content-ID: <greenmind-logo>
+        MemoryStream? logoStream = null;
+        var logoBytes = GetLogoBytes();
+        if (logoBytes is { Length: > 0 })
+        {
+            logoStream = new MemoryStream(logoBytes);
+            var logoResource = new LinkedResource(logoStream, "image/png")
+            {
+                ContentId = "greenmind-logo",
+                TransferEncoding = TransferEncoding.Base64
+            };
+            logoResource.ContentType.MediaType = "image/png";
+            logoResource.ContentType.Name = "logo.png";
+            htmlView.LinkedResources.Add(logoResource);
+        }
+
+        message.AlternateViews.Add(htmlView);
 
         try
         {
             await client.SendMailAsync(message, cancellationToken);
-            logger.LogInformation("Successfully sent email '{Subject}' to {Recipient} via {Host}:{Port}.", subject, to, host, port);
+            _logger.LogInformation("Successfully sent email '{Subject}' to {Recipient} via {Host}:{Port}.", subject, to, host, port);
         }
         catch (SmtpException ex)
         {
-            logger.LogError(ex, "Failed to send email '{Subject}' to {Recipient} via {Host}:{Port}. Verify your Gmail App Password and 2-Step Verification settings.", subject, to, host, port);
+            _logger.LogError(ex, "Failed to send email '{Subject}' to {Recipient} via {Host}:{Port}. Verify your Gmail App Password and 2-Step Verification settings.", subject, to, host, port);
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unexpected error sending email '{Subject}' to {Recipient}.", subject, to);
+            _logger.LogError(ex, "Unexpected error sending email '{Subject}' to {Recipient}.", subject, to);
             throw;
+        }
+        finally
+        {
+            logoStream?.Dispose();
         }
     }
 
-    private string FrontendBaseUrl =>
-        (configuration["Frontend:PublicUrl"] ?? "http://localhost:4200").TrimEnd('/');
+    private string FrontendBaseUrl
+    {
+        get
+        {
+            // 1. Explicit configuration or environment variable (e.g. Frontend:PublicUrl or FRONTEND_URL)
+            var configUrl = _configuration["Frontend:PublicUrl"]
+                ?? _configuration["FrontendUrl"]
+                ?? _configuration["FRONTEND_URL"]
+                ?? _configuration["App:FrontendUrl"];
+
+            if (!string.IsNullOrWhiteSpace(configUrl))
+            {
+                var trimmed = configUrl.Trim().TrimEnd('/');
+                // If explicitly set to a remote domain (not default localhost), prioritize it
+                if (!trimmed.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+                {
+                    return trimmed;
+                }
+            }
+
+            // 2. Dynamic detection from current HTTP Request (Origin / Referer / Host / Forwarded headers)
+            var httpContext = _httpContextAccessor?.HttpContext;
+            if (httpContext is not null)
+            {
+                // Frontend Origin header
+                var origin = httpContext.Request.Headers.Origin.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(origin) && Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+                {
+                    return $"{originUri.Scheme}://{originUri.Authority}".TrimEnd('/');
+                }
+
+                // Frontend Referer header
+                var referer = httpContext.Request.Headers.Referer.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(referer) && Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+                {
+                    return $"{refererUri.Scheme}://{refererUri.Authority}".TrimEnd('/');
+                }
+
+                // Reverse proxy or host header
+                var scheme = httpContext.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? httpContext.Request.Scheme;
+                var host = httpContext.Request.Headers["X-Forwarded-Host"].FirstOrDefault() ?? httpContext.Request.Host.Value;
+                if (!string.IsNullOrWhiteSpace(host))
+                {
+                    return $"{scheme}://{host}".TrimEnd('/');
+                }
+            }
+
+            // 3. Fallback to configured value if present
+            if (!string.IsNullOrWhiteSpace(configUrl))
+            {
+                return configUrl.Trim().TrimEnd('/');
+            }
+
+            // 4. Default fallback
+            return "http://localhost:4200";
+        }
+    }
 
     private string FrontendUrl(string path) =>
         FrontendBaseUrl + (path.StartsWith('/') ? path : "/" + path);
+
+    private static byte[]? GetLogoBytes()
+    {
+        if (_cachedLogoBytes is not null)
+            return _cachedLogoBytes;
+
+        lock (_logoLock)
+        {
+            if (_cachedLogoBytes is not null)
+                return _cachedLogoBytes;
+
+            // 1. Try disk paths
+            var candidatePaths = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "Assets", "logo.png"),
+                Path.Combine(Directory.GetCurrentDirectory(), "Assets", "logo.png"),
+                Path.Combine(AppContext.BaseDirectory, "wwwroot", "logo.png"),
+                Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "logo.png")
+            };
+
+            foreach (var path in candidatePaths)
+            {
+                if (File.Exists(path))
+                {
+                    _cachedLogoBytes = File.ReadAllBytes(path);
+                    return _cachedLogoBytes;
+                }
+            }
+
+            // 2. Try Embedded Resource
+            var assembly = typeof(AccountEmailService).Assembly;
+            var resourceNames = assembly.GetManifestResourceNames();
+            var logoResourceName = resourceNames.FirstOrDefault(n => n.EndsWith("logo.png", StringComparison.OrdinalIgnoreCase));
+            if (logoResourceName is not null)
+            {
+                using var stream = assembly.GetManifestResourceStream(logoResourceName);
+                if (stream is not null)
+                {
+                    using var ms = new MemoryStream();
+                    stream.CopyTo(ms);
+                    _cachedLogoBytes = ms.ToArray();
+                    return _cachedLogoBytes;
+                }
+            }
+
+            return null;
+        }
+    }
 }
+
