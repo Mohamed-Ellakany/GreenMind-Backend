@@ -41,6 +41,14 @@ public interface IChatService
         string ownerUserId,
         SendChatMessageRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<ChatOperationResult<ChatAttachmentDownload>> DownloadAttachmentAsync(
+        ChatScope scope,
+        int? exportPlanId,
+        int sessionId,
+        int attachmentId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record ChatStreamHandle(IAsyncEnumerable<ChatStreamEventDto> Events);

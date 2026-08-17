@@ -113,6 +113,29 @@ public sealed class ExportPlanChatController(
         }
     }
 
+    [HttpGet("{sessionId:int}/attachments/{attachmentId:int}")]
+    public async Task<IActionResult> DownloadAttachment(
+        int exportPlanId,
+        int sessionId,
+        int attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var result = await chatService.DownloadAttachmentAsync(
+            ChatScope.ExportPlan,
+            exportPlanId,
+            sessionId,
+            attachmentId,
+            GetOwnerUserId(),
+            cancellationToken);
+
+        if (result.Status == ChatOperationStatus.NotFound)
+            return NotFound();
+
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType, result.Value.FileName, true);
+    }
+
     private string GetOwnerUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new InvalidOperationException("An authenticated user id is required.");

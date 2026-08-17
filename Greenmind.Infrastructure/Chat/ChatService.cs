@@ -1,12 +1,15 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Greenmind.Application.Contracts.Chat;
+using Greenmind.Application.Contracts.Storage;
 using Greenmind.Application.Dtos.Chat;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Application.Contracts.TaskProposals;
 using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
+using Greenmind.Infrastructure.Disease;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,6 +23,7 @@ public sealed class ChatService(
     IPlanTaskProposalGenerator proposalGenerator,
     ITaskChangeProposalService proposalService,
     TimeProvider timeProvider,
+    IPrivateFileStorage fileStorage,
     ILogger<ChatService> logger) : IChatService
 {
     private static readonly JsonSerializerOptions ContextJsonOptions =
@@ -165,7 +169,13 @@ public sealed class ChatService(
                 message.Content,
                 message.Status,
                 message.CreatedAt,
-                message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault()))
+                message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault(),
+                message.Attachments.Select(a => new ChatAttachmentDto(
+                    a.Id,
+                    a.ChatMessageId,
+                    a.OriginalFileName,
+                    a.ContentType,
+                    a.FileSize)).ToList()))
             .ToListAsync(cancellationToken);
 
         return ChatOperationResult<ChatHistoryPageDto>.Success(
@@ -225,7 +235,13 @@ public sealed class ChatService(
                         message.Content,
                         message.Status,
                         message.CreatedAt,
-                        message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault()))
+                        message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault(),
+                        message.Attachments.Select(a => new ChatAttachmentDto(
+                            a.Id,
+                            a.ChatMessageId,
+                            a.OriginalFileName,
+                            a.ContentType,
+                            a.FileSize)).ToList()))
                     .SingleOrDefaultAsync(cancellationToken);
 
                 if (existingAssistantMessage is not null)
@@ -252,6 +268,38 @@ public sealed class ChatService(
                     IdempotencyKey = normalizedKey
                 };
                 dbContext.ChatMessages.Add(userMessage);
+
+                if (request.Images is { Count: > 0 })
+                {
+                    foreach (var imageInput in request.Images.Take(4))
+                    {
+                        if (string.IsNullOrWhiteSpace(imageInput.DataBase64)) continue;
+                        byte[] bytes;
+                        try { bytes = Convert.FromBase64String(imageInput.DataBase64); }
+                        catch { continue; }
+                        if (bytes.Length == 0 || bytes.Length > 10 * 1024 * 1024) continue;
+
+                        var detected = ImageFileSignature.Detect(bytes);
+                        var contentType = detected?.ContentType ?? (imageInput.ContentType.StartsWith("image/") ? imageInput.ContentType : "image/jpeg");
+                        var ext = detected?.Extension ?? (contentType == "image/png" ? ".png" : ".jpg");
+                        var fileName = string.IsNullOrWhiteSpace(imageInput.FileName) ? $"image{ext}" : Path.GetFileName(imageInput.FileName);
+
+                        using var stream = new MemoryStream(bytes, writable: false);
+                        var storageKey = await fileStorage.SaveAsync("chat", ext, stream, cancellationToken);
+                        var checksum = Convert.ToHexString(SHA256.HashData(bytes));
+
+                        userMessage.Attachments.Add(new ChatAttachment
+                        {
+                            OriginalFileName = fileName,
+                            StorageKey = storageKey,
+                            ContentType = contentType,
+                            FileSize = bytes.Length,
+                            Checksum = checksum,
+                            ChatMessage = userMessage
+                        });
+                    }
+                }
+
                 if (isFirstFarmQuestion)
                     session.Title = BuildQuestionTitle(request.Content);
                 session.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
@@ -355,7 +403,13 @@ public sealed class ChatService(
                     message.Content,
                     message.Status,
                     message.CreatedAt,
-                    message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault()))
+                    message.Proposals.Select(proposal => (int?)proposal.Id).FirstOrDefault(),
+                    message.Attachments.Select(a => new ChatAttachmentDto(
+                        a.Id,
+                        a.ChatMessageId,
+                        a.OriginalFileName,
+                        a.ContentType,
+                        a.FileSize)).ToList()))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (completedReply is not null)
@@ -808,6 +862,45 @@ public sealed class ChatService(
             ' ',
             content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return normalized[..Math.Min(normalized.Length, 200)];
+    }
+
+    public async Task<ChatOperationResult<ChatAttachmentDownload>> DownloadAttachmentAsync(
+        ChatScope scope,
+        int? exportPlanId,
+        int sessionId,
+        int attachmentId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var isOwned = await IsOwnedSessionAsync(
+            scope, exportPlanId, sessionId, ownerUserId, cancellationToken);
+        if (!isOwned)
+            return ChatOperationResult<ChatAttachmentDownload>.NotFound();
+
+        var attachment = await dbContext.ChatAttachments
+            .AsNoTracking()
+            .Where(item => item.Id == attachmentId && item.ChatMessage.ChatSessionId == sessionId)
+            .Select(item => new
+            {
+                item.StorageKey,
+                item.ContentType,
+                item.OriginalFileName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (attachment is null)
+            return ChatOperationResult<ChatAttachmentDownload>.NotFound();
+
+        try
+        {
+            var stream = await fileStorage.OpenReadAsync(attachment.StorageKey, cancellationToken);
+            return ChatOperationResult<ChatAttachmentDownload>.Success(
+                new ChatAttachmentDownload(stream, attachment.ContentType, attachment.OriginalFileName));
+        }
+        catch (FileNotFoundException)
+        {
+            return ChatOperationResult<ChatAttachmentDownload>.NotFound();
+        }
     }
 
     private static async IAsyncEnumerable<ChatStreamEventDto> ReplayAsync(

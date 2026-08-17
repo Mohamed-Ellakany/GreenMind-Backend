@@ -256,6 +256,26 @@ public sealed class DiseaseReportService(
         report.FailureMessage = null;
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // Pre-flight: verify total image size before loading into memory.
+        // On shared hosting, loading raw images + Base64 encoding uses ~4×
+        // the file size in peak memory and can crash the application pool.
+        var totalImageBytes = report.Images.Sum(image => (long)image.FileSize);
+        const long safeImageLoadLimit = 20L * 1024 * 1024;
+        if (totalImageBytes > safeImageLoadLimit)
+        {
+            logger.LogWarning(
+                "Report {ReportId} has {TotalMB:F1} MB of images exceeding the " +
+                "{LimitMB} MB safe processing limit. Marking as failed.",
+                report.Id,
+                totalImageBytes / (1024.0 * 1024.0),
+                safeImageLoadLimit / (1024 * 1024));
+            report.Status = DiseaseAnalysisStatus.Failed;
+            report.FailureMessage =
+                "إجمالي حجم الصور يتجاوز حد المعالجة الآمن. أنشئ جلسة جديدة بصور أصغر حجمًا.";
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
         try
         {
             var images = new List<DiseaseVisionImage>(report.Images.Count);
@@ -264,7 +284,8 @@ public sealed class DiseaseReportService(
                 await using var stream = await fileStorage.OpenReadAsync(
                     storedImage.StorageKey,
                     cancellationToken);
-                using var buffer = new MemoryStream();
+                using var buffer = new MemoryStream(
+                    storedImage.FileSize > 0 ? (int)storedImage.FileSize : 4096);
                 await stream.CopyToAsync(buffer, cancellationToken);
                 images.Add(new DiseaseVisionImage(
                     storedImage.ContentType,
@@ -431,8 +452,10 @@ public sealed class DiseaseReportService(
             المساحة: {plan.AreaInFeddan} فدان
             الزراعة: {plan.PlantingDate:yyyy-MM-dd}
             الحصاد المتوقع: {plan.ExpectedHarvestDate:yyyy-MM-dd}
-            المهام:\n{string.Join("\n", tasks)}
-            قياسات التربة:\n{string.Join("\n", soil)}
+            المهام:
+            {string.Join("\n", tasks)}
+            قياسات التربة:
+            {string.Join("\n", soil)}
             """;
     }
 

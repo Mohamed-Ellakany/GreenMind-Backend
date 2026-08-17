@@ -74,27 +74,53 @@ public sealed class DiagnosisConversationAiService(
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException)
         {
-            // Repair malformed structured output without resending the user's image.
-            var repairPrompt = JsonSerializer.Serialize(new
+            try
             {
-                instruction = "Return valid JSON only using the required diagnosis conversation schema.",
-                originalRequest = prompt,
-                invalidResponse = response
-            });
-            var repaired = await gatewayClient.ChatAsync(
-                systemPrompt,
-                [new ItiChatMessage("user", repairPrompt)],
-                modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
-                cancellationToken: cancellationToken,
-                usageContext: new ItiAiRequestContext(
-                    AiFeatureNames.DiseaseConversationRepair,
-                    request.OwnerUserId,
-                    ExportPlanId: request.ExportPlanId));
-            payload = ParsePayload(repaired);
+                // Repair malformed structured output without resending the user's image.
+                var repairPrompt = JsonSerializer.Serialize(new
+                {
+                    instruction = "Return valid JSON only using the required diagnosis conversation schema.",
+                    originalRequest = prompt,
+                    invalidResponse = response
+                });
+                var repaired = await gatewayClient.ChatAsync(
+                    systemPrompt,
+                    [new ItiChatMessage("user", repairPrompt)],
+                    modelId: ItiBedrockGatewayClient.DefaultStructuredModel,
+                    cancellationToken: cancellationToken,
+                    usageContext: new ItiAiRequestContext(
+                        AiFeatureNames.DiseaseConversationRepair,
+                        request.OwnerUserId,
+                        ExportPlanId: request.ExportPlanId));
+                payload = ParsePayload(repaired);
+            }
+            catch (Exception)
+            {
+                // If repair also fails, gracefully use the cleaned model response text
+                // as assistant observation instead of failing the turn.
+                var cleanResponse = CleanFallbackText(response);
+                if (string.IsNullOrWhiteSpace(cleanResponse))
+                    cleanResponse = "تم استلام الصورة وتسجيلها في جلسة التشخيص.";
+
+                payload = new TurnPayload
+                {
+                    AssistantText = cleanResponse,
+                    Facts = null
+                };
+            }
         }
 
         if (string.IsNullOrWhiteSpace(payload.AssistantText))
-            throw new InvalidDataException("Diagnosis conversation returned an empty reply.");
+        {
+            var fallback = CleanFallbackText(response);
+            payload = new TurnPayload
+            {
+                AssistantText = string.IsNullOrWhiteSpace(fallback)
+                    ? "تم استلام رسالتك وصورك بنجاح."
+                    : fallback,
+                Facts = payload.Facts
+            };
+        }
 
         var facts = payload.Facts ?? new FactsPayload();
         return new DiagnosisConversationTurn(
@@ -106,6 +132,19 @@ public sealed class DiagnosisConversationAiService(
                 Choose(facts.AffectedExtent, request.CurrentFacts.AffectedExtent),
                 Choose(facts.Conditions, request.CurrentFacts.Conditions),
                 Choose(facts.PreviousTreatments, request.CurrentFacts.PreviousTreatments)));
+    }
+
+    private static string CleanFallbackText(string raw)
+    {
+        var cleaned = ItiJson.StripThinkTags(raw).Trim();
+        if (cleaned.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstNewLine = cleaned.IndexOf('\n');
+            var closingFence = cleaned.LastIndexOf("```", StringComparison.Ordinal);
+            if (firstNewLine >= 0 && closingFence > firstNewLine)
+                cleaned = cleaned[(firstNewLine + 1)..closingFence].Trim();
+        }
+        return cleaned;
     }
 
     private static string? Choose(string? current, string? previous) =>

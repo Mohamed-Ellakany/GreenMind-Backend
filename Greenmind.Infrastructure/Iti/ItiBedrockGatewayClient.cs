@@ -9,9 +9,9 @@ namespace Greenmind.Infrastructure.Iti;
 public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
 {
     private const int MaximumTransientAttempts = 3;
-    public const string DefaultChatModel = "anthropic.claude-sonnet-4-6";
-    public const string DefaultStructuredModel = "openai.gpt-oss-120b-1:0";
-    public const string DefaultVisionModel = "anthropic.claude-sonnet-4-6";
+    public const string DefaultChatModel = "qwen.qwen3-vl-235b-a22b";
+    public const string DefaultStructuredModel = "qwen.qwen3-vl-235b-a22b";
+    public const string DefaultVisionModel = "qwen.qwen3-vl-235b-a22b";
     private static readonly Uri ChatReferer =
         new("http://apiaccess.iti.net.eg/student/playground");
 
@@ -127,11 +127,12 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
         {
             try
             {
-                var response = await _httpClient.PostAsJsonAsync(
-                    "student/multimodal-chat",
-                    request,
-                    SerializerOptions,
-                    cancellationToken);
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "student/multimodal-chat")
+                {
+                    Content = JsonContent.Create(request, options: SerializerOptions)
+                };
+                httpRequest.Headers.Referrer = ChatReferer;
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
                 if (attempt == MaximumTransientAttempts || !IsTransient(response.StatusCode))
                     return response;
 
@@ -185,11 +186,14 @@ public sealed class ItiBedrockGatewayClient : IItiBedrockGatewayClient
 
     private string ResolveModel(string? explicitModel, string configurationKey, string fallback)
     {
+        var configured = _configuration[configurationKey];
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
         if (!string.IsNullOrWhiteSpace(explicitModel))
             return explicitModel;
 
-        var configured = _configuration[configurationKey];
-        return string.IsNullOrWhiteSpace(configured) ? fallback : configured;
+        return fallback;
     }
 
     private void EnsureConfigured()
