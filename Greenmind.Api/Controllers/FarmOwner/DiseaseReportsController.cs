@@ -13,11 +13,11 @@ namespace Greenmind.Api.Controllers.FarmOwner;
 [ApiController]
 [Route("api/export-plans/{exportPlanId:int}/disease-reports")]
 [Authorize(Roles = RoleNames.FarmOwner)]
-[EnableRateLimiting("ai-analysis")]
 public sealed class DiseaseReportsController(
     IDiseaseReportService diseaseService) : ControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting("ai-analysis")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(30 * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 30 * 1024 * 1024)]
@@ -85,6 +85,7 @@ public sealed class DiseaseReportsController(
     }
 
     [HttpGet("{reportId:int}/images/{imageId:int}")]
+    [EnableRateLimiting("private-files")]
     public async Task<IActionResult> DownloadImage(
         int exportPlanId,
         int reportId,
@@ -110,6 +111,7 @@ public sealed class DiseaseReportsController(
     }
 
     [HttpPost("{reportId:int}/retry")]
+    [EnableRateLimiting("ai-analysis")]
     public async Task<ActionResult<DiseaseReportDto>> Retry(
         int exportPlanId,
         int reportId,
