@@ -1,4 +1,4 @@
-﻿using Greenmind.Application.Contracts.Persistence;
+using Greenmind.Application.Contracts.Persistence;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Infrastructure.Agents.Plugins;
 using Greenmind.Infrastructure.Agents.Prompts;
@@ -20,6 +20,7 @@ public static class KernelSetup
         {
             c.BaseAddress = CreateWeatherBaseAddress(config["Weather:BaseUrl"]);
             c.DefaultRequestHeaders.Add("x-api-key", config["Weather:ApiKey"]);
+            c.Timeout = TimeSpan.FromMinutes(2);
         });
 
         // Soil is DB-backed now, not HTTP
@@ -38,13 +39,12 @@ public static class KernelSetup
         services.AddHttpClient<IItiBedrockGatewayClient, ItiBedrockGatewayClient>(client =>
         {
             client.BaseAddress = CreateItiBaseAddress(config["iti:BaseUrl"]);
-            client.Timeout = TimeSpan.FromSeconds(120);
+            client.Timeout = TimeSpan.FromMinutes(2);
         });
 
         services.AddScoped<IComplianceDocumentRepository, ComplianceDocumentRepository>();
         services.AddScoped<IComplianceIngestionService, ComplianceIngestionService>();
         services.AddScoped<ComplianceRagPlugin>();
-        // ---------------------------------------------------------------------------------
 
         services.AddScoped<WeatherPlugin>();
         services.AddScoped<SoilPlugin>();

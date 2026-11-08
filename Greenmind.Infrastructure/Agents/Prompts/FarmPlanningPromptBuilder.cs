@@ -60,9 +60,9 @@ namespace Greenmind.Infrastructure.Agents.Prompts
 
                 Output: respond with ONLY valid JSON matching:
                 { "tasks": [ { "taskTypeName": "Irrigation", "title": "", "description": "", "quantity": 1, "unit": "", "plannedDate": "yyyy-MM-dd", "priority": "منخفضة|متوسطة|عالية|حرجة" } ] }
-                Every task must include a positive numeric quantity. taskTypeName must stay one of the English backend
-                identifiers above. All user-facing values (title, description, and unit) must be Arabic. priority must
-                be Arabic: منخفضة، متوسطة، عالية، or حرجة.
+                Every task must include a positive numeric quantity and a valid plannedDate within the planning window.
+                taskTypeName must be one of the English identifiers above (Irrigation, Fertilization, PestControl, Pruning, SoilTest, Harvest, ExportPrep, QualityCheck).
+                User-facing values (title and description) should be in Arabic. unit can be in Arabic (e.g. لتر، كجم، م³، فدان) or standard symbols (e.g. L, kg, m3). priority can be Arabic (منخفضة، متوسطة، عالية، حرجة) or English.
                 No commentary, no markdown, no explanation outside the JSON.
                 """;
         }

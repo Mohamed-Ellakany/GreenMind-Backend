@@ -61,7 +61,7 @@ public static class DependencyInjection
         services.AddHttpClient<IClimateDataClient, NasaPowerClimateClient>(client =>
         {
             client.BaseAddress = new Uri("https://power.larc.nasa.gov/");
-            client.Timeout = TimeSpan.FromSeconds(30);
+            client.Timeout = TimeSpan.FromMinutes(2);
         });
         services.AddScoped<ISoilMeasurementService, SoilMeasurementService>();
         services.AddScoped<IExportPlanPlanningService, ExportPlanPlanningService>();
@@ -83,7 +83,7 @@ public static class DependencyInjection
         services.AddScoped<ISupportService, SupportService>();
         services.AddHttpClient<IDiagnosisKnowledgeProvider, TrustedDiagnosisKnowledgeProvider>(client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(15);
+            client.Timeout = TimeSpan.FromMinutes(2);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("GreenMind-Diagnosis/1.0");
         });
         services.AddSingleton<IDiseaseVisionAnalyzer, DiseaseVisionAnalyzer>();

@@ -22,6 +22,18 @@ public sealed class SendChatMessageRequest
 
 public sealed record ChatImageInputDto(string FileName, string ContentType, string DataBase64);
 
+public sealed record ChatAttachmentDto(
+    int Id,
+    int ChatMessageId,
+    string OriginalFileName,
+    string ContentType,
+    long FileSize);
+
+public sealed record ChatAttachmentDownload(
+    Stream Content,
+    string ContentType,
+    string FileName);
+
 public sealed record ChatSessionDto(
     int Id,
     int FarmId,
@@ -38,7 +50,8 @@ public sealed record ChatMessageDto(
     string Content,
     ChatMessageStatus Status,
     DateTime CreatedAt,
-    int? TaskChangeProposalId = null);
+    int? TaskChangeProposalId = null,
+    IReadOnlyList<ChatAttachmentDto>? Attachments = null);
 
 public sealed record ChatHistoryPageDto(
     IReadOnlyList<ChatMessageDto> Items,

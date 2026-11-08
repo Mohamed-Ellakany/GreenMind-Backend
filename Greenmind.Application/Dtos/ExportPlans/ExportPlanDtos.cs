@@ -258,23 +258,14 @@ public sealed class ExportPlanScheduleAnalysisRequest : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        var suppliedDateCount = new[] { PlantingDate, ExpectedHarvestDate, ExpectedExportDate }
-            .Count(date => date.HasValue);
-        if (suppliedDateCount is > 0 and < 3)
-        {
-            yield return new ValidationResult(
-                "Supply all three dates when re-evaluating a schedule.",
-                [nameof(PlantingDate), nameof(ExpectedHarvestDate), nameof(ExpectedExportDate)]);
-        }
-
-        if (PlantingDate.HasValue && ExpectedHarvestDate <= PlantingDate)
+        if (PlantingDate.HasValue && ExpectedHarvestDate.HasValue && ExpectedHarvestDate <= PlantingDate)
         {
             yield return new ValidationResult(
                 "Expected harvest date must be after the planting date.",
                 [nameof(ExpectedHarvestDate)]);
         }
 
-        if (ExpectedHarvestDate.HasValue && ExpectedExportDate < ExpectedHarvestDate)
+        if (ExpectedHarvestDate.HasValue && ExpectedExportDate.HasValue && ExpectedExportDate < ExpectedHarvestDate)
         {
             yield return new ValidationResult(
                 "Expected export date must be on or after the expected harvest date.",

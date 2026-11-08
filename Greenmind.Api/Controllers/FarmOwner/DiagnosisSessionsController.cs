@@ -14,7 +14,6 @@ namespace Greenmind.Api.Controllers.FarmOwner;
 [ApiController]
 [Route("api/export-plans/{exportPlanId:int}/diagnoses")]
 [Authorize(Roles = RoleNames.FarmOwner)]
-[EnableRateLimiting("ai-analysis")]
 public sealed class DiagnosisSessionsController(
     IDiagnosisSessionService diagnosisService) : ControllerBase
 {
@@ -43,6 +42,7 @@ public sealed class DiagnosisSessionsController(
         Map(await diagnosisService.GetAsync(exportPlanId, diagnosisId, OwnerId(), cancellationToken));
 
     [HttpPost("{diagnosisId:int}/messages")]
+    [EnableRateLimiting("ai-chat")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(30 * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 30 * 1024 * 1024)]
@@ -69,6 +69,7 @@ public sealed class DiagnosisSessionsController(
     }
 
     [HttpPost("{diagnosisId:int}/finalize")]
+    [EnableRateLimiting("ai-analysis")]
     public async Task<ActionResult<DiagnosisDetailDto>> FinalizeDiagnosis(
         int exportPlanId,
         int diagnosisId,
@@ -90,6 +91,7 @@ public sealed class DiagnosisSessionsController(
         Map(await diagnosisService.CancelAsync(exportPlanId, diagnosisId, OwnerId(), cancellationToken));
 
     [HttpPost("{diagnosisId:int}/retry")]
+    [EnableRateLimiting("ai-analysis")]
     public async Task<ActionResult<DiagnosisDetailDto>> Retry(
         int exportPlanId,
         int diagnosisId,
@@ -97,6 +99,7 @@ public sealed class DiagnosisSessionsController(
         Map(await diagnosisService.RetryAsync(exportPlanId, diagnosisId, OwnerId(), cancellationToken));
 
     [HttpGet("{diagnosisId:int}/images/{imageId:int}")]
+    [EnableRateLimiting("private-files")]
     public async Task<IActionResult> DownloadImage(
         int exportPlanId,
         int diagnosisId,
@@ -112,6 +115,7 @@ public sealed class DiagnosisSessionsController(
     }
 
     [HttpPost("{diagnosisId:int}/treatment-proposal")]
+    [EnableRateLimiting("ai-analysis")]
     public async Task<ActionResult<TaskChangeProposalDto>> CreateTreatmentProposal(
         int exportPlanId,
         int diagnosisId,

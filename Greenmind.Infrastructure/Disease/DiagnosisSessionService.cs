@@ -13,6 +13,7 @@ using Greenmind.Domain.Consts.Enums;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Greenmind.Infrastructure.Disease;
 
@@ -23,7 +24,8 @@ public sealed class DiagnosisSessionService(
     IPlanTaskProposalGenerator proposalGenerator,
     ITaskChangeProposalService proposalService,
     IClimateDataClient climateDataClient,
-    TimeProvider timeProvider) : IDiagnosisSessionService
+    TimeProvider timeProvider,
+    ILogger<DiagnosisSessionService> logger) : IDiagnosisSessionService
 {
     private const int MaximumImagesPerMessage = 5;
     private const int MaximumImagesPerSession = 10;
@@ -233,8 +235,13 @@ public sealed class DiagnosisSessionService(
                     ContextReferencesJson = ReplyReference(userMessage.Id)
                 };
             }
-            catch
+            catch (Exception exception)
             {
+                logger.LogError(
+                    exception,
+                    "Diagnosis conversation AI call failed for session {SessionId}, report {ReportId}.",
+                    report.ChatSession!.Id,
+                    report.Id);
                 var recent = report.ChatSession.Messages
                     .Where(message => message.Id != userMessage.Id && message.Status == ChatMessageStatus.Completed)
                     .OrderBy(message => message.Id)

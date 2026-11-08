@@ -17,7 +17,7 @@ public sealed class ItiGatewayClientTests
         var client = CreateClient(handler, new Dictionary<string, string?>
         {
             ["iti:ApiKey"] = "sbg_test_key",
-            ["iti:Model"] = "anthropic.claude-sonnet-4-6"
+            ["iti:Model"] = "qwen.qwen3-vl-235b-a22b"
         });
 
         var result = await client.ChatAsync(
@@ -36,7 +36,7 @@ public sealed class ItiGatewayClientTests
 
         using var body = JsonDocument.Parse(handler.RequestBody!);
         Assert.Equal(3, body.RootElement.EnumerateObject().Count());
-        Assert.Equal("anthropic.claude-sonnet-4-6", body.RootElement.GetProperty("model_id").GetString());
+        Assert.Equal("qwen.qwen3-vl-235b-a22b", body.RootElement.GetProperty("model_id").GetString());
         Assert.Equal("Be concise.", body.RootElement.GetProperty("system_prompt").GetString());
         Assert.Equal("user", body.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
         Assert.Equal("Hello", body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
@@ -116,7 +116,7 @@ public sealed class ItiGatewayClientTests
         Assert.Equal("sbg_test_key", handler.AuthorizationParameter);
 
         using var body = JsonDocument.Parse(handler.RequestBody!);
-        Assert.Equal("anthropic.claude-sonnet-4-6", body.RootElement.GetProperty("model_id").GetString());
+        Assert.Equal("qwen.qwen3-vl-235b-a22b", body.RootElement.GetProperty("model_id").GetString());
         Assert.Equal(300, body.RootElement.GetProperty("max_tokens").GetInt32());
         var message = body.RootElement.GetProperty("messages")[0];
         Assert.Equal("user", message.GetProperty("role").GetString());
