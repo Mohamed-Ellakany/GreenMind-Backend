@@ -84,7 +84,16 @@ public sealed class ScheduleRevisionService(
     {
         var revision = await db.ScheduleRevisions.Include(item => item.Items).SingleAsync(item => item.Id == revisionId, cancellationToken);
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        var types = await db.TaskTypes.ToDictionaryAsync(type => type.Name, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var rawTypes = await db.TaskTypes.ToListAsync(cancellationToken);
+        var types = new Dictionary<string, TaskType>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in rawTypes)
+        {
+            types[t.Name] = t;
+            var normalized = Greenmind.Domain.Consts.TaskTypeNames.Normalize(t.Name);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                types[normalized] = t;
+        }
+
         var tasks = await db.FarmTasks.Include(task => task.Activities)
             .Where(task => task.ExportPlanId == revision.ExportPlanId).ToListAsync(cancellationToken);
         var mutable = tasks.Where(task =>
@@ -95,7 +104,10 @@ public sealed class ScheduleRevisionService(
 
         foreach (var candidate in proposed)
         {
-            if (!types.TryGetValue(candidate.TaskTypeName, out var type)) continue;
+            var normalizedName = Greenmind.Domain.Consts.TaskTypeNames.Normalize(candidate.TaskTypeName);
+            if (!types.TryGetValue(normalizedName, out var type) &&
+                !types.TryGetValue(candidate.TaskTypeName, out type))
+                continue;
             var match = mutable.Where(task => unmatched.Contains(task.Id) && task.TaskTypeId == type.Id)
                 .OrderBy(task => Math.Abs(task.PlannedDate.DayNumber - candidate.PlannedDate.DayNumber)).FirstOrDefault();
             if (match is null)

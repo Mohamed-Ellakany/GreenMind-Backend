@@ -1,4 +1,4 @@
-﻿using Greenmind.Application.Dtos.AI;
+using Greenmind.Application.Dtos.AI;
 using Greenmind.Application.Interfaces.AI;
 using Greenmind.Infrastructure.Agents.Plugins;
 using Greenmind.Infrastructure.Agents.Prompts;
@@ -33,20 +33,35 @@ namespace Greenmind.Infrastructure.Agents
             var complianceContext = await BuildComplianceContextAsync(request);
             var response = await GenerateAsync(systemPrompt, userPrompt, complianceContext, request.ExportPlan.ExportPlanId);
             response.Tasks ??= [];
-            if (response.Tasks.Any(task => !IsValidArabicTask(task)))
+
+            SanitizeTasks(response.Tasks, request);
+
+            if (response.Tasks.Count == 0)
             {
                 response = await GenerateAsync(
-                    systemPrompt + "\nكل قيم title وdescription وunit وpriority داخل tasks يجب أن تكون عربية بالكامل، ويجب إرسال quantity موجب وunit عربي لكل مهمة، مع الإبقاء على taskTypeName كما هو.",
+                    systemPrompt + "\nقم بتوليد مهام زراعية محددة ومفصلة باللغة العربية مع تحديد الكميات والوحدات والتواريخ بوضوح.",
                     userPrompt,
                     complianceContext,
                     request.ExportPlan.ExportPlanId);
                 response.Tasks ??= [];
+                SanitizeTasks(response.Tasks, request);
+            }
+
+            // Ensure task planned dates fall within the planning window
+            var start = request.PlanningWindow.StartDate;
+            var end = request.PlanningWindow.EndDate;
+
+            foreach (var task in response.Tasks)
+            {
+                if (task.PlannedDate < start || task.PlannedDate > end)
+                {
+                    task.PlannedDate = start;
+                }
             }
 
             response.Tasks = response.Tasks
-                .Where(t => t.PlannedDate >= request.PlanningWindow.StartDate
-                         && t.PlannedDate <= request.PlanningWindow.EndDate)
-                .Where(t => IsValidArabicTask(t))
+                .Where(t => t.PlannedDate >= start && t.PlannedDate <= end)
+                .Where(t => !string.IsNullOrWhiteSpace(t.TaskTypeName))
                 .ToList();
 
             return response;
@@ -72,35 +87,72 @@ namespace Greenmind.Infrastructure.Agents
             {
                 PropertyNameCaseInsensitive = true,
                 NumberHandling = JsonNumberHandling.AllowReadingFromString,
-                Converters = { new ArabicTaskPriorityJsonConverter(), new JsonStringEnumConverter() }
+                Converters =
+                {
+                    new ArabicTaskPriorityJsonConverter(),
+                    new JsonStringEnumConverter(),
+                    new FlexibleDateOnlyJsonConverter(),
+                    new FlexibleStringJsonConverter()
+                }
             }) ?? new AgentResponse();
         }
 
-        private static bool HasNonArabicUserText(TaskItemDto task) =>
-            !ContainsArabicLetter(task.Title) ||
-            !ContainsArabicLetter(task.Unit) ||
-            !ContainsArabicLetter(task.Description);
+        private static void SanitizeTasks(List<TaskItemDto> tasks, AgentRequest request)
+        {
+            var crop = request.ExportPlan.Crop;
+            foreach (var task in tasks)
+            {
+                task.TaskTypeName = TaskTypeNames.Normalize(task.TaskTypeName);
+                if (task.Quantity <= 0)
+                {
+                    task.Quantity = 1;
+                }
 
-        private static bool IsValidArabicTask(TaskItemDto task) =>
-            task.Quantity > 0 &&
-            !string.IsNullOrWhiteSpace(task.TaskTypeName) &&
-            !HasNonArabicUserText(task);
+                if (string.IsNullOrWhiteSpace(task.Unit))
+                {
+                    task.Unit = GetDefaultUnitForTaskType(task.TaskTypeName);
+                }
 
-        private static bool ContainsArabicLetter(string? value) =>
-            !string.IsNullOrWhiteSpace(value) &&
-            value.Any(character => character is >= '\u0600' and <= '\u06ff');
+                if (string.IsNullOrWhiteSpace(task.Title))
+                {
+                    task.Title = GetDefaultTitleForTaskType(task.TaskTypeName, crop);
+                }
+
+                if (string.IsNullOrWhiteSpace(task.Description))
+                {
+                    task.Description = task.Title;
+                }
+            }
+        }
+
+        private static string GetDefaultUnitForTaskType(string taskTypeName) => taskTypeName switch
+        {
+            TaskTypeNames.Irrigation => "م³",
+            TaskTypeNames.Fertilization => "كجم",
+            TaskTypeNames.PestControl => "لتر",
+            TaskTypeNames.Pruning => "فدان",
+            TaskTypeNames.SoilTest => "عينة",
+            TaskTypeNames.Harvest => "طن",
+            TaskTypeNames.ExportPrep => "صندوق",
+            TaskTypeNames.QualityCheck => "فحص",
+            _ => "وحدة"
+        };
+
+        private static string GetDefaultTitleForTaskType(string taskTypeName, string crop) => taskTypeName switch
+        {
+            TaskTypeNames.Irrigation => $"ري {crop}",
+            TaskTypeNames.Fertilization => $"تسميد {crop}",
+            TaskTypeNames.PestControl => $"مكافحة وقائية لـ {crop}",
+            TaskTypeNames.Pruning => $"تقليم {crop}",
+            TaskTypeNames.SoilTest => "تحليل التربة والمياه",
+            TaskTypeNames.Harvest => $"حصاد {crop}",
+            TaskTypeNames.ExportPrep => $"فرز وتجهيز {crop} للتصدير",
+            TaskTypeNames.QualityCheck => $"فحص جودة {crop}",
+            _ => $"مهمة زراعية لـ {crop}"
+        };
 
         private sealed class ArabicTaskPriorityJsonConverter : JsonConverter<TaskPriority>
         {
-            private static readonly IReadOnlyDictionary<string, TaskPriority> ArabicValues =
-                new Dictionary<string, TaskPriority>(StringComparer.Ordinal)
-                {
-                    ["منخفضة"] = TaskPriority.Low,
-                    ["متوسطة"] = TaskPriority.Medium,
-                    ["عالية"] = TaskPriority.High,
-                    ["حرجة"] = TaskPriority.Critical
-                };
-
             public override TaskPriority Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
                 if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var numericValue) &&
@@ -112,13 +164,24 @@ namespace Greenmind.Infrastructure.Agents
                 if (reader.TokenType == JsonTokenType.String)
                 {
                     var value = reader.GetString()?.Trim();
-                    if (value is not null && ArabicValues.TryGetValue(value, out var arabicPriority))
-                        return arabicPriority;
+                    if (string.IsNullOrWhiteSpace(value))
+                        return TaskPriority.Medium;
+
+                    var lower = value.ToLowerInvariant();
+                    if (lower.Contains("منخفض") || lower.Contains("low") || lower.Contains("بسيط"))
+                        return TaskPriority.Low;
+                    if (lower.Contains("متوسط") || lower.Contains("عادي") || lower.Contains("medium") || lower.Contains("normal"))
+                        return TaskPriority.Medium;
+                    if (lower.Contains("عال") || lower.Contains("مرتفع") || lower.Contains("high"))
+                        return TaskPriority.High;
+                    if (lower.Contains("حرج") || lower.Contains("طارئ") || lower.Contains("critical") || lower.Contains("urgent"))
+                        return TaskPriority.Critical;
+
                     if (Enum.TryParse<TaskPriority>(value, true, out var englishPriority))
                         return englishPriority;
                 }
 
-                throw new JsonException("priority must be one of: منخفضة، متوسطة، عالية، حرجة.");
+                return TaskPriority.Medium;
             }
 
             public override void Write(Utf8JsonWriter writer, TaskPriority value, JsonSerializerOptions options) =>
@@ -128,7 +191,7 @@ namespace Greenmind.Infrastructure.Agents
                     TaskPriority.Medium => "متوسطة",
                     TaskPriority.High => "عالية",
                     TaskPriority.Critical => "حرجة",
-                    _ => throw new JsonException($"Unsupported task priority: {value}.")
+                    _ => "متوسطة"
                 });
         }
 

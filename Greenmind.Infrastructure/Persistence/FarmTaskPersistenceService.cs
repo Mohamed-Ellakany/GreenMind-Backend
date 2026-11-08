@@ -1,5 +1,6 @@
-﻿using Greenmind.Application.Dtos.AI;
+using Greenmind.Application.Dtos.AI;
 using Greenmind.Application.Interfaces.AI;
+using Greenmind.Domain.Consts;
 using Greenmind.Domain.Entities;
 using Greenmind.Infrastructure.Persistence.Mapping;
 using Microsoft.EntityFrameworkCore;
@@ -16,17 +17,29 @@ public class FarmTaskPersistenceService : IFarmTaskPersistenceService
     {
         if (agentResponse.Tasks.Count == 0) return;
 
-        // Load all TaskTypes once, resolve by name in memory (avoids N queries)
-        var taskTypes = await _db.TaskTypes.AsNoTracking().ToDictionaryAsync(tt => tt.Name, tt => tt.Id, StringComparer.OrdinalIgnoreCase);
+        // Load all TaskTypes once, resolve by normalized name in memory
+        var rawTaskTypes = await _db.TaskTypes.AsNoTracking().ToListAsync();
+        var taskTypes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tt in rawTaskTypes)
+        {
+            taskTypes[tt.Name] = tt.Id;
+            var normalized = TaskTypeNames.Normalize(tt.Name);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                taskTypes[normalized] = tt.Id;
+        }
 
         var entitiesToAdd = new List<FarmTask>();
 
         foreach (var dto in agentResponse.Tasks)
         {
-            if (dto.Quantity <= 0 || string.IsNullOrWhiteSpace(dto.Unit)) continue;
-            if (!taskTypes.TryGetValue(dto.TaskTypeName, out var taskTypeId))
+            var normalizedName = TaskTypeNames.Normalize(dto.TaskTypeName);
+            var resolvedUnit = string.IsNullOrWhiteSpace(dto.Unit) ? "وحدة" : dto.Unit;
+            var resolvedQuantity = dto.Quantity > 0 ? dto.Quantity : 1;
+
+            if (!taskTypes.TryGetValue(normalizedName, out var taskTypeId) &&
+                !taskTypes.TryGetValue(dto.TaskTypeName, out taskTypeId))
             {
-                // Skip (or log) unknown task type names instead of crashing the whole batch
+                // Skip unknown task type names instead of crashing the whole batch
                 continue;
             }
 

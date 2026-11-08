@@ -78,12 +78,22 @@ public sealed class ExportPlanPlanningService(
             AvailableTaskTypes = taskTypes
         };
         var response = await agentPlanningService.GeneratePlanAsync(request);
-        var knownTaskTypes = taskTypes.Select(item => item.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var knownTaskTypes = taskTypes
+            .Select(item => TaskTypeNames.Normalize(item.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cropPhi = EuComplianceRules.GetPreHarvestIntervalDays(plan.CropId, fallbackDays: 7);
         return response.Tasks
+            .Select(task =>
+            {
+                task.TaskTypeName = TaskTypeNames.Normalize(task.TaskTypeName);
+                if (task.Quantity <= 0) task.Quantity = 1;
+                if (string.IsNullOrWhiteSpace(task.Unit)) task.Unit = "وحدة";
+                if (task.PlannedDate < start || task.PlannedDate > end) task.PlannedDate = start;
+                return task;
+            })
             .Where(task => task.PlannedDate >= start && task.PlannedDate <= end && task.Quantity > 0 &&
                            !string.IsNullOrWhiteSpace(task.Unit) && knownTaskTypes.Contains(task.TaskTypeName) &&
-                           (!task.TaskTypeName.Equals("PestControl", StringComparison.OrdinalIgnoreCase) ||
+                           (!task.TaskTypeName.Equals(TaskTypeNames.PestControl, StringComparison.OrdinalIgnoreCase) ||
                             task.PlannedDate <= plan.ExpectedHarvestDate.AddDays(-cropPhi)))
             .GroupBy(task => new { Type = task.TaskTypeName.ToUpperInvariant(), task.PlannedDate })
             .Select(group => group.First())
@@ -235,18 +245,26 @@ public sealed class ExportPlanPlanningService(
 
         var response = await agentPlanningService.GeneratePlanAsync(request);
         var knownTaskTypes = request.AvailableTaskTypes
-            .Select(item => item.Name)
+            .Select(item => TaskTypeNames.Normalize(item.Name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cropPhi = EuComplianceRules.GetPreHarvestIntervalDays(plan.CropId, fallbackDays: 7);
 
         response.Tasks = response.Tasks
+            .Select(task =>
+            {
+                task.TaskTypeName = TaskTypeNames.Normalize(task.TaskTypeName);
+                if (task.Quantity <= 0) task.Quantity = 1;
+                if (string.IsNullOrWhiteSpace(task.Unit)) task.Unit = "وحدة";
+                if (task.PlannedDate < start || task.PlannedDate > end) task.PlannedDate = start;
+                return task;
+            })
             .Where(task =>
                 task.PlannedDate >= start &&
                 task.PlannedDate <= end &&
                 task.Quantity > 0 &&
                 !string.IsNullOrWhiteSpace(task.Unit) &&
                 knownTaskTypes.Contains(task.TaskTypeName) &&
-                (!task.TaskTypeName.Equals("PestControl", StringComparison.OrdinalIgnoreCase) ||
+                (!task.TaskTypeName.Equals(TaskTypeNames.PestControl, StringComparison.OrdinalIgnoreCase) ||
                  task.PlannedDate <= plan.ExpectedHarvestDate.AddDays(-cropPhi)))
             .GroupBy(task => new { Type = task.TaskTypeName.ToUpperInvariant(), task.PlannedDate })
             .Select(group => group.First())
